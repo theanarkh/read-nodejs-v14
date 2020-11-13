@@ -133,16 +133,19 @@ template <typename AliasedBufferT>
 FSReqPromise<AliasedBufferT>*
 FSReqPromise<AliasedBufferT>::New(Environment* env, bool use_bigint) {
   v8::Local<v8::Object> obj;
+  // 创建一个c++对象存到obj中
   if (!env->fsreqpromise_constructor_template()
            ->NewInstance(env->context())
            .ToLocal(&obj)) {
     return nullptr;
   }
+  // 设置一个promise属性，值是一个Promise::Resolver
   v8::Local<v8::Promise::Resolver> resolver;
   if (!v8::Promise::Resolver::New(env->context()).ToLocal(&resolver) ||
       obj->Set(env->context(), env->promise_string(), resolver).IsNothing()) {
     return nullptr;
   }
+  // 返回另一个c++对象，里面保存了obj，obj也保存了指向FSReqPromise对象的指针
   return new FSReqPromise(env, obj, use_bigint);
 }
 
@@ -210,15 +213,18 @@ void FSReqPromise<AliasedBufferT>::MemoryInfo(MemoryTracker* tracker) const {
 
 FSReqBase* GetReqWrap(Environment* env, v8::Local<v8::Value> value,
                       bool use_bigint) {
+  // 是对象说明是继承FSReqBase的对象,比如FSReqCallback（异步模式）                    
   if (value->IsObject()) {
     return Unwrap<FSReqBase>(value.As<v8::Object>());
   } else if (value->StrictEquals(env->fs_use_promises_symbol())) {
+    // Promise模式（异步模式）
     if (use_bigint) {
       return FSReqPromise<AliasedBigUint64Array>::New(env, use_bigint);
     } else {
       return FSReqPromise<AliasedFloat64Array>::New(env, use_bigint);
     }
   }
+  // 同步模式
   return nullptr;
 }
 
@@ -231,7 +237,9 @@ FSReqBase* AsyncDestCall(Environment* env, FSReqBase* req_wrap,
                          Func fn, Args... fn_args) {
   CHECK_NOT_NULL(req_wrap);
   req_wrap->Init(syscall, dest, len, enc);
+  // 调用libuv函数
   int err = req_wrap->Dispatch(fn, fn_args..., after);
+  // 失败则直接执行回调，否则返回一个Promise，见SetReturnValue函数
   if (err < 0) {
     uv_fs_t* uv_req = req_wrap->req();
     uv_req->result = err;
