@@ -113,8 +113,9 @@ struct StringPtr {
     size_ = 0;
   }
 
-
+  // 保存字符串地址到_str指针中
   void Update(const char* str, size_t size) {
+    // 为空则直接赋值
     if (str_ == nullptr) {
       str_ = str;
     } else if (on_heap_ || str_ + size_ != str) {
@@ -193,40 +194,44 @@ class Parser : public AsyncWrap, public StreamListener {
     return 0;
   }
 
-
+  // 解析到键的回调
   int on_header_field(const char* at, size_t length) {
     int rv = TrackHeader(length);
     if (rv != 0) {
       return rv;
     }
-
+    // 相等说明键对值的解析是一一对应的
     if (num_fields_ == num_values_) {
       // start of new field name
+      // 键的数加一
       num_fields_++;
+      // 超过阈值则先回调js消费掉
       if (num_fields_ == kMaxHeaderFieldsCount) {
         // ran out of space - flush to javascript land
         Flush();
+        // 重新开始
         num_fields_ = 1;
         num_values_ = 0;
       }
+      // 初始化
       fields_[num_fields_ - 1].Reset();
     }
 
     CHECK_LT(num_fields_, kMaxHeaderFieldsCount);
     CHECK_EQ(num_fields_, num_values_ + 1);
-
+    // 保存键
     fields_[num_fields_ - 1].Update(at, length);
 
     return 0;
   }
 
-
+  // 解析到值的回调
   int on_header_value(const char* at, size_t length) {
     int rv = TrackHeader(length);
     if (rv != 0) {
       return rv;
     }
-
+    // 值的个数不等于键的个数说明是一个新的值
     if (num_values_ != num_fields_) {
       // start of new header value
       num_values_++;
@@ -241,7 +246,7 @@ class Parser : public AsyncWrap, public StreamListener {
     return 0;
   }
 
-
+  // 解析完http头后的回调
   int on_headers_complete() {
     header_nread_ = 0;
 
@@ -492,15 +497,16 @@ class Parser : public AsyncWrap, public StreamListener {
 
     CHECK(args[0]->IsInt32());
     CHECK(args[1]->IsObject());
-
+    // 头部的最大大小
     if (args.Length() > 2) {
       CHECK(args[2]->IsNumber());
       max_http_header_size = args[2].As<Number>()->Value();
     }
+    // 没有设置则取nodejs的默认值
     if (max_http_header_size == 0) {
       max_http_header_size = env->options()->max_http_header_size;
     }
-
+    // 解析的报文类型
     llhttp_type_t type =
         static_cast<llhttp_type_t>(args[0].As<Int32>()->Value());
 
@@ -726,8 +732,9 @@ class Parser : public AsyncWrap, public StreamListener {
 
   Local<Array> CreateHeaders() {
     // There could be extra entries but the max size should be fixed
+    // http头的个数乘以2，因为一个头由键和值组成
     Local<Value> headers_v[kMaxHeaderFieldsCount * 2];
-
+    // 保存键和值到http头
     for (size_t i = 0; i < num_values_; ++i) {
       headers_v[i * 2] = fields_[i].ToString(env());
       headers_v[i * 2 + 1] = values_[i].ToString(env());
@@ -765,6 +772,7 @@ class Parser : public AsyncWrap, public StreamListener {
 
 
   void Init(llhttp_type_t type, uint64_t max_http_header_size, bool lenient) {
+    // 初始化llhttp
     llhttp_init(&parser_, type, &settings);
     llhttp_set_lenient(&parser_, lenient);
     header_nread_ = 0;
