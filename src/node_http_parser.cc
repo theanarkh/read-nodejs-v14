@@ -164,7 +164,7 @@ class Parser : public AsyncWrap, public StreamListener {
 
   SET_MEMORY_INFO_NAME(Parser)
   SET_SELF_SIZE(Parser)
-
+  // 开始解析报文，一个tcp连接可能会有多个报文
   int on_message_begin() {
     num_fields_ = num_values_ = 0;
     url_.Reset();
@@ -172,7 +172,7 @@ class Parser : public AsyncWrap, public StreamListener {
     return 0;
   }
 
-
+  // 解析url时的回调
   int on_url(const char* at, size_t length) {
     int rv = TrackHeader(length);
     if (rv != 0) {
@@ -183,7 +183,7 @@ class Parser : public AsyncWrap, public StreamListener {
     return 0;
   }
 
-
+  // 解析http响应时的回调
   int on_status(const char* at, size_t length) {
     int rv = TrackHeader(length);
     if (rv != 0) {
@@ -194,7 +194,7 @@ class Parser : public AsyncWrap, public StreamListener {
     return 0;
   }
 
-  // 解析到键的回调
+  // 解析到http头的键时回调
   int on_header_field(const char* at, size_t length) {
     int rv = TrackHeader(length);
     if (rv != 0) {
@@ -225,13 +225,16 @@ class Parser : public AsyncWrap, public StreamListener {
     return 0;
   }
 
-  // 解析到值的回调
+  // 解析到http头的值时回调
   int on_header_value(const char* at, size_t length) {
     int rv = TrackHeader(length);
     if (rv != 0) {
       return rv;
     }
-    // 值的个数不等于键的个数说明是一个新的值
+    /*
+      值的个数不等于键的个数说明正解析到键对应的值，即一一对应。
+      否则说明一个键存在多个值，则不更新值的个数，多个值累加到一个slot
+    */
     if (num_values_ != num_fields_) {
       // start of new header value
       num_values_++;
@@ -277,7 +280,7 @@ class Parser : public AsyncWrap, public StreamListener {
     Local<Value> undefined = Undefined(env()->isolate());
     for (size_t i = 0; i < arraysize(argv); i++)
       argv[i] = undefined;
-
+    // 之前flush过，则继续flush到js层，否则返回全部头给js
     if (have_flushed_) {
       // Slow case, flush remaining headers.
       Flush();
@@ -309,11 +312,12 @@ class Parser : public AsyncWrap, public StreamListener {
     argv[A_VERSION_MINOR] = Integer::New(env()->isolate(), parser_.http_minor);
 
     bool should_keep_alive;
+    // 是否定义了keepalive头
     should_keep_alive = llhttp_should_keep_alive(&parser_);
 
     argv[A_SHOULD_KEEP_ALIVE] =
         Boolean::New(env()->isolate(), should_keep_alive);
-
+    // 是否是升级协议
     argv[A_UPGRADE] = Boolean::New(env()->isolate(), parser_.upgrade);
 
     MaybeLocal<Value> head_response;
@@ -336,7 +340,7 @@ class Parser : public AsyncWrap, public StreamListener {
     return val;
   }
 
-
+  // 解析body时的回调
   int on_body(const char* at, size_t length) {
     EscapableHandleScope scope(env()->isolate());
 
@@ -356,8 +360,11 @@ class Parser : public AsyncWrap, public StreamListener {
     }
 
     Local<Value> argv[3] = {
+      // 当前解析中的数据
       current_buffer_,
+      // body开始的位置
       Integer::NewFromUnsigned(env()->isolate(), at - current_buffer_data_),
+      // body当前长度
       Integer::NewFromUnsigned(env()->isolate(), length)
     };
 
@@ -374,7 +381,7 @@ class Parser : public AsyncWrap, public StreamListener {
     return 0;
   }
 
-
+  // 解析完http协议的回调
   int on_message_complete() {
     HandleScope scope(env()->isolate());
 
@@ -404,6 +411,7 @@ class Parser : public AsyncWrap, public StreamListener {
   }
 
   // Reset nread for the next chunk
+  // 解析到chunk结构头的回调
   int on_chunk_header() {
     header_nread_ = 0;
     return 0;
@@ -411,6 +419,7 @@ class Parser : public AsyncWrap, public StreamListener {
 
 
   // Reset nread for the next chunk
+  // 解析完一个chunk结构的回调
   int on_chunk_complete() {
     header_nread_ = 0;
     return 0;
@@ -462,7 +471,7 @@ class Parser : public AsyncWrap, public StreamListener {
     CHECK(parser->current_buffer_.IsEmpty());
     CHECK_EQ(parser->current_buffer_len_, 0);
     CHECK_NULL(parser->current_buffer_data_);
-
+    // 待解析的数据
     ArrayBufferViewContents<char> buffer(args[0]);
 
     // This is a hack to get the current_buffer to the callbacks with the least
@@ -643,11 +652,12 @@ class Parser : public AsyncWrap, public StreamListener {
     current_buffer_data_ = nullptr;
   }
 
-
+  // 解析http协议
   Local<Value> Execute(const char* data, size_t len) {
     EscapableHandleScope scope(env()->isolate());
-
+    // 待解析的数据长度
     current_buffer_len_ = len;
+    // 待解析的数据
     current_buffer_data_ = data;
     got_exception_ = false;
 
@@ -657,9 +667,11 @@ class Parser : public AsyncWrap, public StreamListener {
     CHECK_EQ(execute_depth_, 0);
 
     execute_depth_++;
+    // 没有数据了
     if (data == nullptr) {
       err = llhttp_finish(&parser_);
     } else {
+      // 有则解析
       err = llhttp_execute(&parser_, data, len);
       Save();
     }
@@ -684,6 +696,7 @@ class Parser : public AsyncWrap, public StreamListener {
     }
 
     // Unassign the 'buffer_' variable
+    // 消费完了
     current_buffer_.Clear();
     current_buffer_len_ = 0;
     current_buffer_data_ = nullptr;
@@ -729,7 +742,7 @@ class Parser : public AsyncWrap, public StreamListener {
     }
     return scope.Escape(nread_obj);
   }
-
+  // 
   Local<Array> CreateHeaders() {
     // There could be extra entries but the max size should be fixed
     // http头的个数乘以2，因为一个头由键和值组成
@@ -745,6 +758,7 @@ class Parser : public AsyncWrap, public StreamListener {
 
 
   // spill headers and request path to JS land
+  // 头部太多，先刷一部分到js层
   void Flush() {
     HandleScope scope(env()->isolate());
 

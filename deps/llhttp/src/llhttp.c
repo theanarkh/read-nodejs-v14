@@ -4755,6 +4755,7 @@ static llparse_state_t llhttp__internal__run(
     }
     case s_n_llhttp__internal__n_invoke_load_type:
     s_n_llhttp__internal__n_invoke_load_type: {
+      // 获取解析报文的类型，请求，响应或两者
       switch (llhttp__internal__c_load_type(state, p, endp)) {
         case 1:
           goto s_n_llhttp__internal__n_start_req;
@@ -6305,6 +6306,7 @@ static llparse_state_t llhttp__internal__run(
     /* UNREACHABLE */;
     abort();
   }
+  // 开始解析
   s_n_llhttp__internal__n_invoke_llhttp__on_message_begin: {
     switch (llhttp__on_message_begin(state, p, endp)) {
       case 0:
