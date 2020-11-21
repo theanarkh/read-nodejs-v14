@@ -680,6 +680,7 @@ class Parser : public AsyncWrap, public StreamListener {
     // Calculate bytes read and resume after Upgrade/CONNECT pause
     size_t nread = len;
     if (err != HPE_OK) {
+      // 计算已经消费的字节数
       nread = llhttp_get_error_pos(&parser_) - data;
 
       // This isn't a real pause, just a way to stop parsing early.
