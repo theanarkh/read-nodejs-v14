@@ -407,9 +407,13 @@ void StreamBase::AddMethods(Environment* env, Local<FunctionTemplate> t) {
   t->PrototypeTemplate()->Set(FIXED_ONE_BYTE_STRING(env->isolate(),
                                                     "isStreamBase"),
                               True(env->isolate()));
+  // 设置访问器                            
   t->PrototypeTemplate()->SetAccessor(
+      // 键名
       FIXED_ONE_BYTE_STRING(env->isolate(), "onread"),
+      // getter
       BaseObject::InternalFieldGet<kOnReadFunctionField>,
+      // setter，Value::IsFunction是set之前的校验函数，见InternalFieldSet（模板函数）定义
       BaseObject::InternalFieldSet<kOnReadFunctionField, &Value::IsFunction>);
 }
 

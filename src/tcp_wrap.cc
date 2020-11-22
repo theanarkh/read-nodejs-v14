@@ -87,7 +87,7 @@ void TCPWrap::Initialize(Local<Object> target,
                              Boolean::New(env->isolate(), false));
   t->InstanceTemplate()->Set(env->owner_symbol(), Null(env->isolate()));
   t->InstanceTemplate()->Set(env->onconnection_string(), Null(env->isolate()));
-
+  // 见LibuvStreamWrap::GetConstructorTemplate
   t->Inherit(LibuvStreamWrap::GetConstructorTemplate(env));
   // 设置t的原型方法，即TCP.prototype的属性
   env->SetProtoMethod(t, "open", Open);

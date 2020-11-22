@@ -276,7 +276,11 @@ class Parser : public AsyncWrap, public StreamListener {
 
     if (!cb->IsFunction())
       return 0;
-
+    /*
+      如果http头没有超过阈值，则这里会把头部的值通过kOnHeadersComplete返回，
+      如果头部超过阈值，在on_header_field中就会被flush到js层，并且标记了have_flushed_，
+      所以这里也会调用Flush更新到js层，而不是通过的kOnHeadersComplete回调时传入的参数
+    */
     Local<Value> undefined = Undefined(env()->isolate());
     for (size_t i = 0; i < arraysize(argv); i++)
       argv[i] = undefined;
