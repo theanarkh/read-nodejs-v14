@@ -123,8 +123,10 @@ class ProcessWrap : public HandleWrap {
       } else if (type->StrictEquals(env->pipe_string())) {
         options->stdio[i].flags = static_cast<uv_stdio_flags>(
             UV_CREATE_PIPE | UV_READABLE_PIPE | UV_WRITABLE_PIPE);
+        // 拿到对应的stream    
         options->stdio[i].data.stream = StreamForWrap(env, stdio);
       } else if (type->StrictEquals(env->wrap_string())) {
+        // 继承stream中的fd
         options->stdio[i].flags = UV_INHERIT_STREAM;
         options->stdio[i].data.stream = StreamForWrap(env, stdio);
       } else {

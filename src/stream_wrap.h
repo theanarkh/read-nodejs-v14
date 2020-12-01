@@ -59,11 +59,11 @@ class LibuvStreamWrap : public HandleWrap, public StreamBase {
   inline uv_stream_t* stream() const {
     return stream_;
   }
-
+  // 是否是unix域或命名管道
   inline bool is_named_pipe() const {
     return stream()->type == UV_NAMED_PIPE;
   }
-
+  // 是否是unix域并且支持传递文件描述符
   inline bool is_named_pipe_ipc() const {
     return is_named_pipe() &&
            reinterpret_cast<const uv_pipe_t*>(stream())->ipc != 0;

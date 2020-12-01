@@ -37,7 +37,7 @@ inline void StreamReq::Dispose() {
   object()->SetAlignedPointerInInternalField(kStreamReqField, nullptr);
   delete this;
 }
-
+// 获取和该请求相关联的原始js对象
 inline v8::Local<v8::Object> StreamReq::object() {
   return GetAsyncWrap()->object();
 }
@@ -51,12 +51,12 @@ inline void StreamListener::PassReadErrorToPreviousListener(ssize_t nread) {
   CHECK_NOT_NULL(previous_listener_);
   previous_listener_->OnStreamRead(nread, uv_buf_init(nullptr, 0));
 }
-
+// 实现流关闭时的处理逻辑
 inline void StreamListener::OnStreamAfterShutdown(ShutdownWrap* w, int status) {
   CHECK_NOT_NULL(previous_listener_);
   previous_listener_->OnStreamAfterShutdown(w, status);
 }
-
+// 实现写结束时的处理逻辑
 inline void StreamListener::OnStreamAfterWrite(WriteWrap* w, int status) {
   CHECK_NOT_NULL(previous_listener_);
   previous_listener_->OnStreamAfterWrite(w, status);
@@ -110,7 +110,7 @@ inline void StreamResource::RemoveStreamListener(StreamListener* listener) {
   listener->stream_ = nullptr;
   listener->previous_listener_ = nullptr;
 }
-// 申请一块内存
+// 有数据可读时执行的回调，申请一块内存准备保存数据，资源方只负责同通知listener，具体逻辑在listener中实现
 inline uv_buf_t StreamResource::EmitAlloc(size_t suggested_size) {
   DebugSealHandleScope handle_scope(v8::Isolate::GetCurrent());
   return listener_->OnStreamAlloc(suggested_size);
@@ -138,7 +138,7 @@ inline void StreamResource::EmitWantsWrite(size_t suggested_size) {
   DebugSealHandleScope handle_scope(v8::Isolate::GetCurrent());
   listener_->OnStreamWantsWrite(suggested_size);
 }
-
+// 继承StreamBase流的类默认拥有一个listener
 inline StreamBase::StreamBase(Environment* env) : env_(env) {
   PushStreamListener(&default_listener_);
 }
@@ -146,7 +146,7 @@ inline StreamBase::StreamBase(Environment* env) : env_(env) {
 inline Environment* StreamBase::stream_env() const {
   return env_;
 }
-
+// 关闭一个流，req_wrap_obj是js层传进来的对象
 inline int StreamBase::Shutdown(v8::Local<v8::Object> req_wrap_obj) {
   Environment* env = stream_env();
 
@@ -162,9 +162,10 @@ inline int StreamBase::Shutdown(v8::Local<v8::Object> req_wrap_obj) {
   }
 
   AsyncHooks::DefaultTriggerAsyncIdScope trigger_scope(GetAsyncWrap());
+  // 创建一个用于请求Libuv的数据结构
   ShutdownWrap* req_wrap = CreateShutdownWrap(req_wrap_obj);
   int err = DoShutdown(req_wrap);
-
+  // 执行出错则销毁js层对象
   if (err != 0 && req_wrap != nullptr) {
     req_wrap->Dispose();
   }
@@ -189,10 +190,12 @@ inline StreamWriteResult StreamBase::Write(
   int err;
 
   size_t total_bytes = 0;
+  // 计算需要写入的数据大小
   for (size_t i = 0; i < count; ++i)
     total_bytes += bufs[i].len;
+  // 同上
   bytes_written_ += total_bytes;
-
+  // 是否需要发送文件描述符，不需要则直接写
   if (send_handle == nullptr) {
     err = DoTryWrite(&bufs, &count);
     if (err != 0 || count == 0) {
@@ -212,8 +215,9 @@ inline StreamWriteResult StreamBase::Write(
   }
 
   AsyncHooks::DefaultTriggerAsyncIdScope trigger_scope(GetAsyncWrap());
+  // 创建一个用于请求Libuv的写请求对象
   WriteWrap* req_wrap = CreateWriteWrap(req_wrap_obj);
-
+  // 执行写
   err = DoWrite(req_wrap, bufs, count, send_handle);
   bool async = err == 0;
 
@@ -275,7 +279,11 @@ inline StreamBase* StreamBase::FromObject(v8::Local<v8::Object> obj) {
       obj->GetAlignedPointerFromInternalField(kStreamBaseField));
 }
 
-
+/*
+  关闭结束时回调，由请求类（ShutdownWrap）调用Libuv，
+  所以Libuv操作完成后，首先执行请求类的回调，请求类通知流，流触发
+  对应的事件，进一步通知listener
+*/
 inline void ShutdownWrap::OnDone(int status) {
   stream()->EmitAfterShutdown(this, status);
   Dispose();
@@ -285,12 +293,12 @@ inline void WriteWrap::SetAllocatedStorage(AllocatedBuffer&& storage) {
   CHECK_NULL(storage_.data());
   storage_ = std::move(storage);
 }
-
+// 同ShutdownWrap::OnDone
 inline void WriteWrap::OnDone(int status) {
   stream()->EmitAfterWrite(this, status);
   Dispose();
 }
-
+// 请求Libuv结束后的回调，调用子类的OnDone
 inline void StreamReq::Done(int status, const char* error_str) {
   AsyncWrap* async_wrap = GetAsyncWrap();
   Environment* env = async_wrap->env();
@@ -300,7 +308,7 @@ inline void StreamReq::Done(int status, const char* error_str) {
                               OneByteString(env->isolate(), error_str))
                               .Check();
   }
-
+  // 执行子类的OnDone
   OnDone(status);
 }
 

@@ -41,12 +41,12 @@ template int StreamBase::WriteString<UCS2>(
 template int StreamBase::WriteString<LATIN1>(
     const FunctionCallbackInfo<Value>& args);
 
-
+// 操作流，启动读取
 int StreamBase::ReadStartJS(const FunctionCallbackInfo<Value>& args) {
   return ReadStart();
 }
 
-
+// 操作流，停止读取
 int StreamBase::ReadStopJS(const FunctionCallbackInfo<Value>& args) {
   return ReadStop();
 }
@@ -58,7 +58,7 @@ int StreamBase::UseUserBuffer(const FunctionCallbackInfo<Value>& args) {
   PushStreamListener(new CustomBufferJSListener(buf));
   return 0;
 }
-
+// 操作流，请求关闭
 int StreamBase::Shutdown(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsObject());
   Local<Object> req_wrap_obj = args[0].As<Object>();
@@ -70,7 +70,7 @@ void StreamBase::SetWriteResult(const StreamWriteResult& res) {
   env_->stream_base_state()[kBytesWritten] = res.bytes;
   env_->stream_base_state()[kLastWriteWasAsync] = res.async;
 }
-
+// 操作流，写入
 int StreamBase::Writev(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
 
@@ -168,7 +168,7 @@ int StreamBase::Writev(const FunctionCallbackInfo<Value>& args) {
   return res.err;
 }
 
-
+// 写Buffer，支持发送文件描述符
 int StreamBase::WriteBuffer(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsObject());
 
@@ -181,19 +181,23 @@ int StreamBase::WriteBuffer(const FunctionCallbackInfo<Value>& args) {
 
   Local<Object> req_wrap_obj = args[0].As<Object>();
   uv_buf_t buf;
+  // 数据内容和长度
   buf.base = Buffer::Data(args[1]);
   buf.len = Buffer::Length(args[1]);
 
   uv_stream_t* send_handle = nullptr;
-
+  // 是对象并且流支持发送文件描述符
   if (args[2]->IsObject() && IsIPCPipe()) {
     Local<Object> send_handle_obj = args[2].As<Object>();
 
     HandleWrap* wrap;
+    // 从返回js的对象中获取internalField中指向的c++层对象
     ASSIGN_OR_RETURN_UNWRAP(&wrap, send_handle_obj, UV_EINVAL);
+    // 拿到Libuv层的handle
     send_handle = reinterpret_cast<uv_stream_t*>(wrap->GetHandle());
     // Reference LibuvStreamWrap instance to prevent it from being garbage
     // collected before `AfterWrite` is called.
+    // 设置到js层请求对象中
     req_wrap_obj->Set(env->context(),
                       env->handle_string(),
                       send_handle_obj).Check();
@@ -312,7 +316,7 @@ int StreamBase::WriteString(const FunctionCallbackInfo<Value>& args) {
   return res.err;
 }
 
-
+// 触发流事件，有数据可读
 MaybeLocal<Value> StreamBase::CallJSOnreadMethod(ssize_t nread,
                                                  Local<ArrayBuffer> ab,
                                                  size_t offset,
@@ -337,24 +341,24 @@ MaybeLocal<Value> StreamBase::CallJSOnreadMethod(ssize_t nread,
   Local<Value> argv[] = {
     ab.IsEmpty() ? Undefined(env->isolate()).As<Value>() : ab.As<Value>()
   };
-
+  // GetAsyncWrap在StreamBase子类实现，拿到StreamBase类对象
   AsyncWrap* wrap = GetAsyncWrap();
   CHECK_NOT_NULL(wrap);
+  // 获取回调执行
   Local<Value> onread = wrap->object()->GetInternalField(kOnReadFunctionField);
   CHECK(onread->IsFunction());
   return wrap->MakeCallback(onread.As<Function>(), arraysize(argv), argv);
 }
 
-
+// 默认不是，子类重写
 bool StreamBase::IsIPCPipe() {
   return false;
 }
 
-
+// 子类重写
 int StreamBase::GetFD() {
   return -1;
 }
-
 
 Local<Object> StreamBase::GetObject() {
   return GetAsyncWrap()->object();
@@ -416,9 +420,10 @@ void StreamBase::AddMethods(Environment* env, Local<FunctionTemplate> t) {
       // setter，Value::IsFunction是set之前的校验函数，见InternalFieldSet（模板函数）定义
       BaseObject::InternalFieldSet<kOnReadFunctionField, &Value::IsFunction>);
 }
-
+// 工具函数和实例this无关，和入参有关
 void StreamBase::GetFD(const FunctionCallbackInfo<Value>& args) {
   // Mimic implementation of StreamBase::GetFD() and UDPWrap::GetFD().
+  // 从js层对象获取他关联的c++对象，不一定是this
   StreamBase* wrap = StreamBase::FromObject(args.This().As<Object>());
   if (wrap == nullptr) return args.GetReturnValue().Set(UV_EINVAL);
 
@@ -533,12 +538,14 @@ void CustomBufferJSListener::OnStreamRead(ssize_t nread, const uv_buf_t& buf) {
 
 void ReportWritesToJSStreamListener::OnStreamAfterReqFinished(
     StreamReq* req_wrap, int status) {
+  // 请求所操作的流
   StreamBase* stream = static_cast<StreamBase*>(stream_);
   Environment* env = stream->stream_env();
   AsyncWrap* async_wrap = req_wrap->GetAsyncWrap();
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
   CHECK(!async_wrap->persistent().IsEmpty());
+  // 获取原始的js层对象
   Local<Object> req_wrap_obj = async_wrap->object();
 
   Local<Value> argv[] = {
@@ -552,7 +559,7 @@ void ReportWritesToJSStreamListener::OnStreamAfterReqFinished(
     argv[2] = OneByteString(env->isolate(), msg);
     stream->ClearError();
   }
-
+  // 回调js层
   if (req_wrap_obj->Has(env->context(), env->oncomplete_string()).FromJust())
     async_wrap->MakeCallback(env->oncomplete_string(), arraysize(argv), argv);
 }

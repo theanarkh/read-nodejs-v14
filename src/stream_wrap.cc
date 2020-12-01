@@ -154,14 +154,14 @@ Local<FunctionTemplate> LibuvStreamWrap::GetConstructorTemplate(
   return tmpl;
 }
 
-
+// 从object中获取关联的对象
 LibuvStreamWrap* LibuvStreamWrap::From(Environment* env, Local<Object> object) {
   Local<FunctionTemplate> sw = env->libuv_stream_wrap_ctor_template();
   CHECK(!sw.IsEmpty() && sw->HasInstance(object));
   return Unwrap<LibuvStreamWrap>(object);
 }
 
-
+// 获取流对应的fd
 int LibuvStreamWrap::GetFD() {
 #ifdef _WIN32
   return fd_;
@@ -188,12 +188,12 @@ AsyncWrap* LibuvStreamWrap::GetAsyncWrap() {
   return static_cast<AsyncWrap*>(this);
 }
 
-
+// 是否支持传递文件描述符
 bool LibuvStreamWrap::IsIPCPipe() {
   return is_named_pipe_ipc();
 }
 
-
+// 实现启动读逻辑
 int LibuvStreamWrap::ReadStart() {
   return uv_read_start(stream(), [](uv_handle_t* handle,
                                     size_t suggested_size,
@@ -204,19 +204,19 @@ int LibuvStreamWrap::ReadStart() {
   });
 }
 
-
+// 实现停止读逻辑
 int LibuvStreamWrap::ReadStop() {
   return uv_read_stop(stream());
 }
 
-
+// 
 void LibuvStreamWrap::OnUvAlloc(size_t suggested_size, uv_buf_t* buf) {
   HandleScope scope(env()->isolate());
   Context::Scope context_scope(env()->context());
 
   *buf = EmitAlloc(suggested_size);
 }
-
+// 处理传递的文件描述符
 template <class WrapType>
 static MaybeLocal<Object> AcceptHandle(Environment* env,
                                        LibuvStreamWrap* parent) {
@@ -226,27 +226,28 @@ static MaybeLocal<Object> AcceptHandle(Environment* env,
 
   EscapableHandleScope scope(env->isolate());
   Local<Object> wrap_obj;
-
+  // 根据一个表示客户端的对象，然后把文件描述符保存其中
   if (!WrapType::Instantiate(env, parent, WrapType::SOCKET).ToLocal(&wrap_obj))
     return Local<Object>();
 
   HandleWrap* wrap = Unwrap<HandleWrap>(wrap_obj);
   CHECK_NOT_NULL(wrap);
+  // 拿到c++对象中封装的handle
   uv_stream_t* stream = reinterpret_cast<uv_stream_t*>(wrap->GetHandle());
   CHECK_NOT_NULL(stream);
-
+  // 从服务器流中摘下一个fd保存到steam
   if (uv_accept(parent->stream(), stream))
     ABORT();
 
   return scope.Escape(wrap_obj);
 }
 
-
+// 实现OnUvRead
 void LibuvStreamWrap::OnUvRead(ssize_t nread, const uv_buf_t* buf) {
   HandleScope scope(env()->isolate());
   Context::Scope context_scope(env()->context());
   uv_handle_type type = UV_UNKNOWN_HANDLE;
-
+  // 是否支持传递文件描述符并且有待处理的文件描述符，则判断文件描述符类型
   if (is_named_pipe_ipc() &&
       uv_pipe_pending_count(reinterpret_cast<uv_pipe_t*>(stream())) > 0) {
     type = uv_pipe_pending_type(reinterpret_cast<uv_pipe_t*>(stream()));
@@ -255,10 +256,10 @@ void LibuvStreamWrap::OnUvRead(ssize_t nread, const uv_buf_t* buf) {
   // We should not be getting this callback if someone has already called
   // uv_close() on the handle.
   CHECK_EQ(persistent().IsEmpty(), false);
-
+  // 读取成功
   if (nread > 0) {
     MaybeLocal<Object> pending_obj;
-
+    // 根据类型创建一个新的c++对象表示客户端，并且从服务器中摘下一个fd保存到客户端
     if (type == UV_TCP) {
       pending_obj = AcceptHandle<TCPWrap>(env(), this);
     } else if (type == UV_NAMED_PIPE) {
@@ -281,7 +282,7 @@ void LibuvStreamWrap::OnUvRead(ssize_t nread, const uv_buf_t* buf) {
   EmitRead(nread, *buf);
 }
 
-
+// 工具函数
 void LibuvStreamWrap::GetWriteQueueSize(
     const FunctionCallbackInfo<Value>& info) {
   LibuvStreamWrap* wrap;
@@ -308,7 +309,7 @@ void LibuvStreamWrap::SetBlocking(const FunctionCallbackInfo<Value>& args) {
   bool enable = args[0]->IsTrue();
   args.GetReturnValue().Set(uv_stream_set_blocking(wrap->stream(), enable));
 }
-
+// 定义一个关闭的请求
 typedef SimpleShutdownWrap<ReqWrap<uv_shutdown_t>> LibuvShutdownWrap;
 typedef SimpleWriteWrap<ReqWrap<uv_write_t>> LibuvWriteWrap;
 
@@ -320,7 +321,7 @@ WriteWrap* LibuvStreamWrap::CreateWriteWrap(Local<Object> object) {
   return new LibuvWriteWrap(this, object);
 }
 
-
+// 发起关闭请求，req_wrap是c++层创建的对象
 int LibuvStreamWrap::DoShutdown(ShutdownWrap* req_wrap_) {
   LibuvShutdownWrap* req_wrap = static_cast<LibuvShutdownWrap*>(req_wrap_);
   return req_wrap->Dispatch(uv_shutdown, stream(), AfterUvShutdown);

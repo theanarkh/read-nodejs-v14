@@ -26,25 +26,30 @@ struct StreamWriteResult {
 };
 
 using JSMethodFunction = void(const v8::FunctionCallbackInfo<v8::Value>& args);
-
+// 请求Libuv的基类
 class StreamReq {
  public:
+ // js层传进来的对象的internalField[1]保存了StreamReq类对象
   static constexpr int kStreamReqField = 1;
-
+  // stream为所操作的流，req_wrap_obj为js层传进来的对象
   explicit StreamReq(StreamBase* stream,
                      v8::Local<v8::Object> req_wrap_obj) : stream_(stream) {
+    // js层对象指向当前StreamReq对象                   
     AttachToObject(req_wrap_obj);
   }
 
   virtual ~StreamReq() = default;
+  // 子类定义
   virtual AsyncWrap* GetAsyncWrap() = 0;
+  // 获取相关联的原始js对象
   v8::Local<v8::Object> object();
-
+  // 请求结束后的回调，会执行子类的onDone，onDone由子类实现
   void Done(int status, const char* error_str = nullptr);
+  // js层对象不再执行StreamReq实例
   void Dispose();
-
+  // 获取所操作的流
   inline StreamBase* stream() const { return stream_; }
-
+  // 从js层对象获取StreamReq对象
   static StreamReq* FromObject(v8::Local<v8::Object> req_wrap_obj);
 
   // Sets all internal fields of `req_wrap_obj` to `nullptr`.
@@ -52,6 +57,7 @@ class StreamReq {
   // and what we use in C++ after creating these objects from their
   // v8::ObjectTemplates, to avoid the overhead of calling the
   // constructor explicitly.
+  // 请求js层对象的internalField所有指向
   static inline void ResetObject(v8::Local<v8::Object> req_wrap_obj);
 
  protected:
@@ -62,7 +68,7 @@ class StreamReq {
  private:
   StreamBase* const stream_;
 };
-
+// 关闭请求
 class ShutdownWrap : public StreamReq {
  public:
   ShutdownWrap(StreamBase* stream,
@@ -72,7 +78,7 @@ class ShutdownWrap : public StreamReq {
   // Call stream()->EmitAfterShutdown() and dispose of this request wrap.
   void OnDone(int status) override;
 };
-
+// 写请求
 class WriteWrap : public StreamReq {
  public:
   void SetAllocatedStorage(AllocatedBuffer&& storage);
@@ -92,6 +98,7 @@ class WriteWrap : public StreamReq {
 // This is the generic interface for objects that control Node.js' C++ streams.
 // For example, the default `EmitToJSStreamListener` emits a stream's data
 // as Buffers in JS, or `TLSWrap` reads and decrypts data from a stream.
+// listener基类，定义哪些需要监听的操作
 class StreamListener {
  public:
   virtual ~StreamListener();
@@ -173,6 +180,7 @@ class ReportWritesToJSStreamListener : public StreamListener {
 
 // A default emitter that just pushes data chunks as Buffer instances to
 // JS land via the handle’s .ondata method.
+// 默认的listener
 class EmitToJSStreamListener : public ReportWritesToJSStreamListener {
  public:
   uv_buf_t OnStreamAlloc(size_t suggested_size) override;
@@ -197,6 +205,7 @@ class CustomBufferJSListener : public ReportWritesToJSStreamListener {
 
 // A generic stream, comparable to JS land’s `Duplex` streams.
 // A stream is always controlled through one `StreamListener` instance.
+// 表示资源的基类，定义了可以由哪些操作和会触发的事件
 class StreamResource {
  public:
   virtual ~StreamResource();

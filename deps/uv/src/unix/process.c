@@ -204,9 +204,11 @@ static int uv__process_init_stdio(uv_stdio_container_t* container, int fds[2]) {
 
   case UV_INHERIT_FD:
   case UV_INHERIT_STREAM:
+    // 需要继承的fd
     if (container->flags & UV_INHERIT_FD)
       fd = container->data.fd;
     else
+      // 继承stream中的fd
       fd = uv__stream_fd(container->data.stream);
 
     if (fd == -1)

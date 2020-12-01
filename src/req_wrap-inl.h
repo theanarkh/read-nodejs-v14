@@ -8,7 +8,7 @@
 #include "uv.h"
 
 namespace node {
-
+// 把req插入env的req队列
 ReqWrapBase::ReqWrapBase(Environment* env) {
   CHECK(env->has_run_bootstrapping_code());
   env->req_wrap_queue()->PushBack(this);
@@ -20,6 +20,7 @@ ReqWrap<T>::ReqWrap(Environment* env,
                     AsyncWrap::ProviderType provider)
     : AsyncWrap(env, object, provider),
       ReqWrapBase(env) {
+  // 初始化状态
   Reset();
 }
 
@@ -27,23 +28,23 @@ template <typename T>
 ReqWrap<T>::~ReqWrap() {
   CHECK_EQ(false, persistent().IsEmpty());
 }
-
+// 保存libuv数据结构和ReqWrap实例的关系
 template <typename T>
 void ReqWrap<T>::Dispatched() {
   req_.data = this;
 }
-
+// 重置字段
 template <typename T>
 void ReqWrap<T>::Reset() {
   original_callback_ = nullptr;
   req_.data = nullptr;
 }
-
+// 通过req成员找所属对象的地址
 template <typename T>
 ReqWrap<T>* ReqWrap<T>::from_req(T* req) {
   return ContainerOf(&ReqWrap<T>::req_, req);
 }
-
+// 取消请求
 template <typename T>
 void ReqWrap<T>::Cancel() {
   if (req_.data == this)  // Only cancel if already dispatched.
@@ -133,7 +134,7 @@ struct MakeLibuvRequestCallback<ReqT, void(*)(ReqT*, Args...)> {
     return Wrapper;
   }
 };
-
+// 调用Libuv函数
 template <typename T>
 template <typename LibuvFunction, typename... Args>
 int ReqWrap<T>::Dispatch(LibuvFunction fn, Args... args) {

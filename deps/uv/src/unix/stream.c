@@ -1012,20 +1012,31 @@ static void uv__stream_eof(uv_stream_t* stream, const uv_buf_t* buf) {
 static int uv__stream_queue_fd(uv_stream_t* stream, int fd) {
   uv__stream_queued_fds_t* queued_fds;
   unsigned int queue_size;
-
+  // 原来的内存
   queued_fds = stream->queued_fds;
+  // 没有内存，则分配
   if (queued_fds == NULL) {
+    // 默认8个
     queue_size = 8;
+    /* 
+      一个元数据内存+多个fd的内存
+      （前面加*代表解引用后的值的类型所占的内存大小，减一是因为uv__stream_queued_fds_t结构体本身有一个空间）
+    */
     queued_fds = uv__malloc((queue_size - 1) * sizeof(*queued_fds->fds) +
                             sizeof(*queued_fds));
     if (queued_fds == NULL)
       return UV_ENOMEM;
+    // 容量
     queued_fds->size = queue_size;
+    // 已使用个数
     queued_fds->offset = 0;
+    // 指向可用的内存
     stream->queued_fds = queued_fds;
 
     /* Grow */
+  // 之前的内存用完了，扩容
   } else if (queued_fds->size == queued_fds->offset) {
+    // 每次加8个
     queue_size = queued_fds->size + 8;
     queued_fds = uv__realloc(queued_fds,
                              (queue_size - 1) * sizeof(*queued_fds->fds) +
@@ -1037,11 +1048,14 @@ static int uv__stream_queue_fd(uv_stream_t* stream, int fd) {
      */
     if (queued_fds == NULL)
       return UV_ENOMEM;
+    // 更新容量大小
     queued_fds->size = queue_size;
+    // 保存新的内存
     stream->queued_fds = queued_fds;
   }
 
   /* Put fd in a queue */
+  // 保存fd
   queued_fds->fds[queued_fds->offset++] = fd;
 
   return 0;
@@ -1059,7 +1073,7 @@ static int uv__stream_queue_fd(uv_stream_t* stream, int fd) {
 
 static int uv__stream_recv_cmsg(uv_stream_t* stream, struct msghdr* msg) {
   struct cmsghdr* cmsg;
-
+  // 遍历msg
   for (cmsg = CMSG_FIRSTHDR(msg); cmsg != NULL; cmsg = CMSG_NXTHDR(msg, cmsg)) {
     char* start;
     char* end;

@@ -38,11 +38,12 @@
 #endif
 
 namespace node {
-
+// 把对象存储到persistent_handle_中，必要的时候通过object()取出来
 BaseObject::BaseObject(Environment* env, v8::Local<v8::Object> object)
     : persistent_handle_(env->isolate(), object), env_(env) {
   CHECK_EQ(false, object.IsEmpty());
   CHECK_GT(object->InternalFieldCount(), 0);
+  // 把this存到object中
   object->SetAlignedPointerInInternalField(0, static_cast<void*>(this));
   env->AddCleanupHook(DeleteMe, static_cast<void*>(this));
   env->modify_base_object_count(1);
@@ -97,7 +98,7 @@ v8::Local<v8::Object> BaseObject::object(v8::Isolate* isolate) const {
 Environment* BaseObject::env() const {
   return env_;
 }
-
+// 通过obj取出里面保存的BaseObject对象
 BaseObject* BaseObject::FromJSObject(v8::Local<v8::Object> obj) {
   CHECK_GT(obj->InternalFieldCount(), 0);
   return static_cast<BaseObject*>(obj->GetAlignedPointerFromInternalField(0));
