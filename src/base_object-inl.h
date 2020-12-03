@@ -149,10 +149,12 @@ BaseObject::MakeLazilyInitializedJSTemplate(Environment* env) {
   auto constructor = [](const v8::FunctionCallbackInfo<v8::Value>& args) {
     DCHECK(args.IsConstructCall());
     DCHECK_GT(args.This()->InternalFieldCount(), 0);
+    // new的对象的internalField第一个索引的值为空
     args.This()->SetAlignedPointerInInternalField(0, nullptr);
   };
-
+  // 新建一个一般的函数模板，new 到时候执行把new的对象作为参数执行constructor
   v8::Local<v8::FunctionTemplate> t = env->NewFunctionTemplate(constructor);
+  // internalField个数是1
   t->InstanceTemplate()->SetInternalFieldCount(1);
   return t;
 }

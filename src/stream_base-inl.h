@@ -164,6 +164,7 @@ inline int StreamBase::Shutdown(v8::Local<v8::Object> req_wrap_obj) {
   AsyncHooks::DefaultTriggerAsyncIdScope trigger_scope(GetAsyncWrap());
   // 创建一个用于请求Libuv的数据结构
   ShutdownWrap* req_wrap = CreateShutdownWrap(req_wrap_obj);
+  // 子类实现，不同流关闭的逻辑不一样 
   int err = DoShutdown(req_wrap);
   // 执行出错则销毁js层对象
   if (err != 0 && req_wrap != nullptr) {

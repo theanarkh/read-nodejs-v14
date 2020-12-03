@@ -105,6 +105,7 @@ struct CallLibuvFunction<ReqT, void(*)(ReqT*, Args...)> {
 // function type, it is assumed that this it is the request callback, and a
 // wrapper that calls the original callback is created.
 // If not, the parameter is passed through verbatim.
+// 透传参数给Libuv
 template <typename ReqT, typename T>
 struct MakeLibuvRequestCallback {
   static T For(ReqWrap<ReqT>* req_wrap, T v) {
@@ -117,20 +118,25 @@ struct MakeLibuvRequestCallback {
 // Match the `void callback(uv_req_t*, ...);` signature that all libuv
 // callbacks use.
 template <typename ReqT, typename... Args>
+// 模板参数的第二个是函数时适配这个
 struct MakeLibuvRequestCallback<ReqT, void(*)(ReqT*, Args...)> {
   using F = void(*)(ReqT* req, Args... args);
-
+  // Libuv回调
   static void Wrapper(ReqT* req, Args... args) {
+    // 通过Libuv结构体拿到对应的c++对象
     ReqWrap<ReqT>* req_wrap = ReqWrap<ReqT>::from_req(req);
     req_wrap->env()->DecreaseWaitingRequestCounter();
+    // 拿到原始的回调执行
     F original_callback = reinterpret_cast<F>(req_wrap->original_callback_);
     original_callback(req, args...);
   }
 
   static F For(ReqWrap<ReqT>* req_wrap, F v) {
+    // 保存原来的函数
     CHECK_NULL(req_wrap->original_callback_);
     req_wrap->original_callback_ =
         reinterpret_cast<typename ReqWrap<ReqT>::callback_t>(v);
+    // 返回包裹函数
     return Wrapper;
   }
 };

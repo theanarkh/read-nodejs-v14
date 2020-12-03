@@ -34,7 +34,7 @@ using v8::Local;
 using v8::Object;
 using v8::Value;
 
-
+// 修改handle为活跃状态
 void HandleWrap::Ref(const FunctionCallbackInfo<Value>& args) {
   HandleWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
@@ -43,7 +43,7 @@ void HandleWrap::Ref(const FunctionCallbackInfo<Value>& args) {
     uv_ref(wrap->GetHandle());
 }
 
-
+// 修改hande为不活跃状态
 void HandleWrap::Unref(const FunctionCallbackInfo<Value>& args) {
   HandleWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
@@ -52,28 +52,30 @@ void HandleWrap::Unref(const FunctionCallbackInfo<Value>& args) {
     uv_unref(wrap->GetHandle());
 }
 
-
+// 判断handle是否处于活跃状态
 void HandleWrap::HasRef(const FunctionCallbackInfo<Value>& args) {
   HandleWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
   args.GetReturnValue().Set(HasRef(wrap));
 }
 
-
+// 关闭handle，成功后执行回调
 void HandleWrap::Close(const FunctionCallbackInfo<Value>& args) {
   HandleWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
-
+  // 传入回调
   wrap->Close(args[0]);
 }
-
+// 正在关闭handle的函数
 void HandleWrap::Close(Local<Value> close_callback) {
+  // 正在关闭或已经关闭
   if (state_ != kInitialized)
     return;
 
   uv_close(handle_, OnClose);
+  // 关闭中
   state_ = kClosing;
-
+  // 传了回调则保存起来
   if (!close_callback.IsEmpty() && close_callback->IsFunction() &&
       !persistent().IsEmpty()) {
     object()->Set(env()->context(),
@@ -107,13 +109,15 @@ HandleWrap::HandleWrap(Environment* env,
     : AsyncWrap(env, object, provider),
       state_(kInitialized),
       handle_(handle) {
+  // 保存Libuv handle和c++对象的关系
   handle_->data = this;
   HandleScope scope(env->isolate());
   CHECK(env->has_run_bootstrapping_code());
+  // 插入handle队列
   env->handle_wrap_queue()->PushBack(this);
 }
 
-
+// 关闭handle成功后回调
 void HandleWrap::OnClose(uv_handle_t* handle) {
   BaseObjectPtr<HandleWrap> wrap { static_cast<HandleWrap*>(handle->data) };
   wrap->Detach();
@@ -125,10 +129,10 @@ void HandleWrap::OnClose(uv_handle_t* handle) {
   CHECK_EQ(wrap->state_, kClosing);
 
   wrap->state_ = kClosed;
-
+  //  子类实现的函数
   wrap->OnClose();
   wrap->handle_wrap_queue_.Remove();
-
+  // 有onclose回调则执行
   if (!wrap->persistent().IsEmpty() &&
       wrap->object()->Has(env->context(), env->handle_onclose_symbol())
       .FromMaybe(false)) {

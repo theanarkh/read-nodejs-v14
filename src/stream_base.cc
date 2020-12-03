@@ -488,7 +488,7 @@ uv_buf_t EmitToJSStreamListener::OnStreamAlloc(size_t suggested_size) {
   Environment* env = static_cast<StreamBase*>(stream_)->stream_env();
   return env->AllocateManaged(suggested_size).release();
 }
-// 
+// 读取数据结束后回调 
 void EmitToJSStreamListener::OnStreamRead(ssize_t nread, const uv_buf_t& buf_) {
   CHECK_NOT_NULL(stream_);
   StreamBase* stream = static_cast<StreamBase*>(stream_);
@@ -496,7 +496,7 @@ void EmitToJSStreamListener::OnStreamRead(ssize_t nread, const uv_buf_t& buf_) {
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
   AllocatedBuffer buf(env, buf_);
-
+  // 读取失败
   if (nread <= 0)  {
     if (nread < 0)
       stream->CallJSOnreadMethod(nread, Local<ArrayBuffer>());
@@ -505,7 +505,7 @@ void EmitToJSStreamListener::OnStreamRead(ssize_t nread, const uv_buf_t& buf_) {
 
   CHECK_LE(static_cast<size_t>(nread), buf.size());
   buf.Resize(nread);
-
+  // 读取成功回调js层
   stream->CallJSOnreadMethod(nread, buf.ToArrayBuffer());
 }
 
