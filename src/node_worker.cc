@@ -244,7 +244,7 @@ void Worker::Run() {
     Locker locker(isolate_);
     Isolate::Scope isolate_scope(isolate_);
     SealHandleScope outer_seal(isolate_);
-
+    // std::unique_ptr<Environment, FreeEnvironment> env_;
     DeleteFnPtr<Environment, FreeEnvironment> env_;
     auto cleanup_env = OnScopeLeave([&]() {
       if (!env_) return;
@@ -662,6 +662,7 @@ namespace {
 
 // Return the MessagePort that is global for this Environment and communicates
 // with the internal [kPort] port of the JS Worker class in the parent thread.
+// 获取和主线程通信的端口
 void GetEnvMessagePort(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
   Local<Object> port = env->message_port();

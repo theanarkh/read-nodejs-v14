@@ -611,6 +611,7 @@ struct is_callable<T, typename std::enable_if<
     std::is_same<decltype(void(&T::operator())), void>::value
     >::type> : std::true_type { };
 
+// https://en.cppreference.com/w/cpp/memory/unique_ptr
 template <typename T, void (*function)(T*)>
 struct FunctionDeleter {
   void operator()(T* pointer) const { function(pointer); }

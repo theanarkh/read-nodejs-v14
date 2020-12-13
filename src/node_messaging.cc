@@ -448,7 +448,7 @@ void MessagePortData::Disentangle() {
   // We close MessagePorts after disentanglement, so we enqueue a corresponding
   // message and trigger the corresponding uv_async_t to let them know that
   // this happened.
-  // 插入一个空的消息
+  // 插入一个空的消息通知对端和本端
   AddToIncomingQueue(Message());
   if (sibling != nullptr) {
     sibling->AddToIncomingQueue(Message());
@@ -496,17 +496,20 @@ bool MessagePort::IsDetached() const {
   return data_ == nullptr || IsHandleClosing();
 }
 
+// 有消息到达，通知事件循环执行回调
 void MessagePort::TriggerAsync() {
   if (IsHandleClosing()) return;
   CHECK_EQ(uv_async_send(&async_), 0);
 }
 
+// 关闭接收消息的端口
 void MessagePort::Close(v8::Local<v8::Value> close_callback) {
   Debug(this, "Closing message port, data set = %d", static_cast<int>(!!data_));
-
+  
   if (data_) {
     // Wrap this call with accessing the mutex, so that TriggerAsync()
     // can check IsHandleClosing() without race conditions.
+    // 防止再接收消息
     Mutex::ScopedLock sibling_lock(data_->mutex_);
     HandleWrap::Close(close_callback);
   } else {
@@ -522,6 +525,7 @@ void MessagePort::New(const FunctionCallbackInfo<Value>& args) {
   THROW_ERR_CONSTRUCT_CALL_INVALID(env);
 }
 
+// 新建一个端口，并且可以挂载一个MessagePortData
 MessagePort* MessagePort::New(
     Environment* env,
     Local<Context> context,
@@ -532,10 +536,12 @@ MessagePort* MessagePort::New(
   // Construct a new instance, then assign the listener instance and possibly
   // the MessagePortData to it.
   Local<Object> instance;
+  // js层使用的对象
   if (!ctor_templ->InstanceTemplate()->NewInstance(context).ToLocal(&instance))
     return nullptr;
   MessagePort* port = new MessagePort(env, context, instance);
   CHECK_NOT_NULL(port);
+  // 需要挂载MessagePortData
   if (data) {
     port->Detach();
     port->data_ = std::move(data);
@@ -544,9 +550,11 @@ MessagePort* MessagePort::New(
     // in AddToIncomingQueue(). (This would likely be unproblematic without it,
     // but it's better to be safe than sorry.)
     Mutex::ScopedLock lock(port->data_->mutex_);
+    // 修改data的owner为当前消息端口
     port->data_->owner_ = port;
     // If the existing MessagePortData object had pending messages, this is
     // the easiest way to run that queue.
+    // data中可能有消息
     port->TriggerAsync();
   }
   return port;
@@ -557,16 +565,16 @@ MaybeLocal<Value> MessagePort::ReceiveMessage(Local<Context> context,
   Message received;
   {
     // Get the head of the message queue.
-    // 互斥访问
+    // 互斥访问消息队列
     Mutex::ScopedLock lock(data_->mutex_);
 
     Debug(this, "MessagePort has message");
-
     bool wants_message = receiving_messages_ || !only_if_receiving;
     // We have nothing to do if:
     // - There are no pending messages
     // - We are not intending to receive messages, and the message we would
     //   receive is not the final "close" message.
+    // 没有消息、不需要接收消息、消息是关闭消息
     if (data_->incoming_messages_.empty() ||
         (!wants_message &&
          !data_->incoming_messages_.front().IsCloseMessage())) {
@@ -576,22 +584,23 @@ MaybeLocal<Value> MessagePort::ReceiveMessage(Local<Context> context,
     received = std::move(data_->incoming_messages_.front());
     data_->incoming_messages_.pop_front();
   }
-
+  // 是关闭消息则关闭端口
   if (received.IsCloseMessage()) {
     Close();
     return env()->no_message_symbol();
   }
 
   if (!env()->can_call_into_js()) return MaybeLocal<Value>();
-  // 返回
+  // 反序列化后返回
   return received.Deserialize(env(), context);
 }
 
+// 接收消息
 void MessagePort::OnMessage() {
   Debug(this, "Running MessagePort::OnMessage()");
   HandleScope handle_scope(env()->isolate());
   Local<Context> context = object(env()->isolate())->CreationContext();
-
+  // 接收消息条数的阈值
   size_t processing_limit;
   {
     Mutex::ScopedLock(data_->mutex_);
@@ -612,6 +621,7 @@ void MessagePort::OnMessage() {
       // noticable, at least on Windows.
       // (That might require more investigation by somebody more familiar with
       // Windows.)
+      // 通知事件循环
       TriggerAsync();
       return;
     }
@@ -620,7 +630,9 @@ void MessagePort::OnMessage() {
     Context::Scope context_scope(context);
 
     Local<Value> payload;
+    // 读取消息
     if (!ReceiveMessage(context, true).ToLocal(&payload)) break;
+    // 没有了
     if (payload == env()->no_message_symbol()) break;
 
     if (!env()->can_call_into_js()) {
@@ -631,6 +643,7 @@ void MessagePort::OnMessage() {
 
     Local<Object> event;
     Local<Value> cb_args[1];
+    // 新建一个MessageEvent对象，回调onmessage事件
     if (!env()->message_event_object_template()->NewInstance(context)
             .ToLocal(&event) ||
         event->Set(context, env()->data_string(), payload).IsNothing() ||
@@ -647,6 +660,7 @@ void MessagePort::OnMessage() {
   }
 }
 
+// 关闭消息端口后的回调,HandleWrap调用
 void MessagePort::OnClose() {
   Debug(this, "MessagePort::OnClose()");
   if (data_) {
@@ -656,6 +670,7 @@ void MessagePort::OnClose() {
   data_.reset();
 }
 
+// 解除关联的MessagePortData
 std::unique_ptr<MessagePortData> MessagePort::Detach() {
   CHECK(data_);
   Mutex::ScopedLock lock(data_->mutex_);
@@ -675,7 +690,7 @@ Maybe<bool> MessagePort::PostMessage(Environment* env,
 
   // Per spec, we need to both check if transfer list has the source port, and
   // serialize the input message, even if the MessagePort is closed or detached.
-
+  // 序列化
   Maybe<bool> serialization_maybe =
       msg.Serialize(env, context, message_v, transfer_v, obj);
   if (data_ == nullptr) {
