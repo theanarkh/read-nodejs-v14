@@ -58,11 +58,13 @@ MaybeLocal<Object> TCPWrap::Instantiate(Environment* env,
   EscapableHandleScope handle_scope(env->isolate());
   AsyncHooks::DefaultTriggerAsyncIdScope trigger_scope(parent);
   CHECK_EQ(env->tcp_constructor_template().IsEmpty(), false);
+  // 拿到导出到js层的TCP构造函数，缓存在env中
   Local<Function> constructor = env->tcp_constructor_template()
                                     ->GetFunction(env->context())
                                     .ToLocalChecked();
   CHECK_EQ(constructor.IsEmpty(), false);
   Local<Value> type_value = Int32::New(env->isolate(), type);
+  // 相当于我们在js层调用new TCP()时拿到的对象
   return handle_scope.EscapeMaybe(
       constructor->NewInstance(env->context(), 1, &type_value));
 }

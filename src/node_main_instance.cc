@@ -210,12 +210,13 @@ std::unique_ptr<Environment> NodeMainInstance::CreateMainEnvironment(
     IsolateSettings s;
     SetIsolateErrorHandlers(isolate_, s);
   } else {
+    // 新建一个context
     context = NewContext(isolate_);
   }
 
   CHECK(!context.IsEmpty());
   Context::Scope context_scope(context);
-
+  // 新建一个环境，并记录到context中
   std::unique_ptr<Environment> env = std::make_unique<Environment>(
       isolate_data_.get(),
       context,
@@ -224,6 +225,7 @@ std::unique_ptr<Environment> NodeMainInstance::CreateMainEnvironment(
       static_cast<Environment::Flags>(Environment::kIsMainThread |
                                       Environment::kOwnsProcessState |
                                       Environment::kOwnsInspector));
+  // 初始化Libuv相关的结构体                                    
   env->InitializeLibuv(per_process::v8_is_profiling);
   env->InitializeDiagnostics();
 

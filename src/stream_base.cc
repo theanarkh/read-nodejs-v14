@@ -370,11 +370,13 @@ void StreamBase::AddMethod(Environment* env,
                            Local<FunctionTemplate> t,
                            JSMethodFunction* stream_method,
                            Local<String> string) {
+  // 新建一个函数模板                           
   Local<FunctionTemplate> templ =
       env->NewFunctionTemplate(stream_method,
                                signature,
                                v8::ConstructorBehavior::kThrow,
                                v8::SideEffectType::kHasNoSideEffect);
+  // 设置原型属性
   t->PrototypeTemplate()->SetAccessorProperty(
       string, templ, Local<FunctionTemplate>(), attributes);
 }
@@ -385,7 +387,7 @@ void StreamBase::AddMethods(Environment* env, Local<FunctionTemplate> t) {
   enum PropertyAttribute attributes =
       static_cast<PropertyAttribute>(ReadOnly | DontDelete | DontEnum);
   Local<Signature> sig = Signature::New(env->isolate(), t);
-
+  // 设置原型属性
   AddMethod(env, sig, attributes, t, GetFD, env->fd_string());
   AddMethod(
       env, sig, attributes, t, GetExternal, env->external_stream_string());

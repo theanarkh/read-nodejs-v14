@@ -490,6 +490,7 @@ void napi_module_register_by_symbol(v8::Local<v8::Object> exports,
 }
 
 // Registers a NAPI module.
+// 注册一个napi模块,nm_flags是0
 void napi_module_register(napi_module* mod) {
   node::node_module* nm = new node::node_module {
     -1,
@@ -504,7 +505,7 @@ void napi_module_register(napi_module* mod) {
   };
   node::node_module_register(nm);
 }
-
+// 注册一个nodejs退出时执行的函数
 napi_status napi_add_env_cleanup_hook(napi_env env,
                                       void (*fun)(void* arg),
                                       void* arg) {
@@ -515,7 +516,7 @@ napi_status napi_add_env_cleanup_hook(napi_env env,
 
   return napi_ok;
 }
-
+// 移除一个nodejs退出时执行的函数 
 napi_status napi_remove_env_cleanup_hook(napi_env env,
                                          void (*fun)(void* arg),
                                          void* arg) {
@@ -696,6 +697,7 @@ napi_status napi_make_callback(napi_env env,
   return GET_RETURN_STATUS(env);
 }
 
+// 创建一个buffer，data非空时执行buffer的内存首地址
 napi_status napi_create_buffer(napi_env env,
                                size_t length,
                                void** data,

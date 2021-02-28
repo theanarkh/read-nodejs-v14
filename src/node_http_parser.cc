@@ -564,7 +564,7 @@ class Parser : public AsyncWrap, public StreamListener {
     Parser* parser;
     ASSIGN_OR_RETURN_UNWRAP(&parser, args.Holder());
     CHECK(args[0]->IsObject());
-    StreamBase* stream = StreamBase::FromObject(args[0].As<Object>());
+    StreamBase* stream = StreamBase::FromObjject(args[0].As<Object>());
     CHECK_NOT_NULL(stream);
     stream->PushStreamListener(parser);
   }
