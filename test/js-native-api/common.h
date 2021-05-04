@@ -48,6 +48,7 @@
   } while (0)
 
 // Returns NULL if the_call doesn't return napi_ok.
+// 判断函数执行的结果（this_call）是不是napi_ok，不是则返回错误，否则返回NULL
 #define NAPI_CALL(env, the_call)                                         \
   NAPI_CALL_BASE(env, the_call, NULL)
 

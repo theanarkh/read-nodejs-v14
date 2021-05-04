@@ -93,7 +93,7 @@ typedef napi_value (*napi_callback)(napi_env env,
 typedef void (*napi_finalize)(napi_env env,
                               void* finalize_data,
                               void* finalize_hint);
-
+// 属性描述符
 typedef struct {
   // One of utf8name or name should be NULL.
   const char* utf8name;
@@ -116,11 +116,14 @@ typedef struct {
 } napi_extended_error_info;
 
 #ifdef NAPI_EXPERIMENTAL
+// 枚举属性的模式
 typedef enum {
+  // 包括原型中的属性
   napi_key_include_prototypes,
+  // 不包括原型中的属性，即对象自己的属性
   napi_key_own_only
 } napi_key_collection_mode;
-
+// 枚举key的模式，即枚举哪些类型的属性
 typedef enum {
   napi_key_all_properties = 0,
   napi_key_writable = 1,

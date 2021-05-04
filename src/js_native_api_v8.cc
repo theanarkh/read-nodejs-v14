@@ -17,6 +17,7 @@
 // is null terminated. For V8 the equivalent is -1. The assert
 // validates that our cast of NAPI_AUTO_LENGTH results in -1 as
 // needed by V8.
+// 把字符串字面量转成v8对象
 #define CHECK_NEW_FROM_UTF8_LEN(env, result, str, len)                   \
   do {                                                                   \
     static_assert(static_cast<int>(NAPI_AUTO_LENGTH) == -1,              \
@@ -37,6 +38,7 @@
 #define CHECK_NEW_FROM_UTF8(env, result, str) \
   CHECK_NEW_FROM_UTF8_LEN((env), (result), (str), NAPI_AUTO_LENGTH)
 
+// 创建类型数组
 #define CREATE_TYPED_ARRAY(                                                    \
     env, type, size_of_element, buffer, byte_offset, length, out)              \
   do {                                                                         \
@@ -56,11 +58,12 @@
 namespace v8impl {
 
 namespace {
-
+// 获取属性描述符中的属性名称
 inline static napi_status
 V8NameFromPropertyDescriptor(napi_env env,
                              const napi_property_descriptor* p,
                              v8::Local<v8::Name>* result) {
+  // utf9name和name互斥                             
   if (p->utf8name != nullptr) {
     CHECK_NEW_FROM_UTF8(env, *result, p->utf8name);
   } else {
@@ -75,20 +78,23 @@ V8NameFromPropertyDescriptor(napi_env env,
 }
 
 // convert from n-api property attributes to v8::PropertyAttribute
+// 获取属性的属性，即可读可写等flag
 inline static v8::PropertyAttribute V8PropertyAttributesFromDescriptor(
     const napi_property_descriptor* descriptor) {
   unsigned int attribute_flags = v8::PropertyAttribute::None;
 
   // The napi_writable attribute is ignored for accessor descriptors, but
   // V8 would throw `TypeError`s on assignment with nonexistence of a setter.
+  // 没有存取器，并且属性是不可写，说明是只读的
   if ((descriptor->getter == nullptr && descriptor->setter == nullptr) &&
     (descriptor->attributes & napi_writable) == 0) {
     attribute_flags |= v8::PropertyAttribute::ReadOnly;
   }
-
+  // 不可枚举
   if ((descriptor->attributes & napi_enumerable) == 0) {
     attribute_flags |= v8::PropertyAttribute::DontEnum;
   }
+  // 不可配置，即不可删除
   if ((descriptor->attributes & napi_configurable) == 0) {
     attribute_flags |= v8::PropertyAttribute::DontDelete;
   }
@@ -186,6 +192,7 @@ inline static napi_status ConcludeDeferred(napi_env env,
 }
 
 // Wrapper around v8impl::Persistent that implements reference counting.
+// 使用Persistent句柄实现v8对象的引用计数
 class Reference : protected Finalizer, RefTracker {
  protected:
   Reference(napi_env env,
@@ -199,16 +206,19 @@ class Reference : protected Finalizer, RefTracker {
         _persistent(env->isolate, value),
         _refcount(initial_refcount),
         _delete_self(delete_self) {
+    // 设置成弱引用，即如果只有Reference对象引用value，则会被gc回收
     if (initial_refcount == 0) {
       _persistent.SetWeak(
           this, FinalizeCallback, v8::WeakCallbackType::kParameter);
     }
+    // 插入对应的队列
     Link(finalize_callback == nullptr
         ? &env->reflist
         : &env->finalizing_reflist);
   }
 
  public:
+  // 包裹的对象
   void* Data() {
     return _finalize_data;
   }
@@ -256,8 +266,9 @@ class Reference : protected Finalizer, RefTracker {
       reference->_delete_self = true;
     }
   }
-
+  // 增加引用计数
   uint32_t Ref() {
+    // 如果当前设置了弱引用则需要清除，因为这时候应该有调用方在引用该对象，而不只有_persistent在引用
     if (++_refcount == 1) {
       _persistent.ClearWeak();
     }
@@ -280,7 +291,7 @@ class Reference : protected Finalizer, RefTracker {
   uint32_t RefCount() {
     return _refcount;
   }
-
+  // 返回引用的对象
   v8::Local<v8::Value> Get() {
     if (_persistent.IsEmpty()) {
       return v8::Local<v8::Value>();
@@ -330,7 +341,7 @@ class Reference : protected Finalizer, RefTracker {
   static void SecondPassCallback(const v8::WeakCallbackInfo<Reference>& data) {
     data.GetParameter()->Finalize();
   }
-
+  // v8持久类型变量
   v8impl::Persistent<v8::Value> _persistent;
   uint32_t _refcount;
   bool _delete_self;
@@ -425,8 +436,10 @@ struct CallbackBundle {
 
 // Base class extended by classes that wrap V8 function and property callback
 // info.
+// 封装v8函数对象的回调函数信息
 class CallbackWrapper {
  public:
+  // this_arg是被调原始函数的持有者（对象）
   CallbackWrapper(napi_value this_arg, size_t args_length, void* data)
       : _this(this_arg), _args_length(args_length), _data(data) {}
 
@@ -462,6 +475,7 @@ class CallbackWrapperBase : public CallbackWrapper {
   napi_value GetNewTarget() override { return nullptr; }
 
  protected:
+  // 调用包裹的函数
   void InvokeCallback() {
     napi_callback_info cbinfo_wrapper = reinterpret_cast<napi_callback_info>(
         static_cast<CallbackWrapper*>(this));
@@ -489,6 +503,7 @@ class FunctionCallbackWrapper
                                  &CallbackBundle::function_or_getter> {
  public:
   static void Invoke(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    // info为被调用的原始函数的信息
     FunctionCallbackWrapper cbwrapper(info);
     cbwrapper.InvokeCallback();
   }
@@ -612,11 +627,14 @@ static
 v8::Local<v8::Value> CreateFunctionCallbackData(napi_env env,
                                                 napi_callback cb,
                                                 void* data) {
+  // 把函数和执行时入参封装到一个结构体中                                                
   CallbackBundle* bundle = new CallbackBundle();
   bundle->function_or_getter = cb;
   bundle->cb_data = data;
   bundle->env = env;
+  // 返回个v8对象
   v8::Local<v8::Value> cbdata = v8::External::New(env->isolate, bundle);
+  // 释放cbdata的时候也需要释放bundle
   Reference::New(env, cbdata, 0, true, DeleteCallbackBundle, bundle, nullptr);
 
   return cbdata;
@@ -626,7 +644,7 @@ enum WrapType {
   retrievable,
   anonymous
 };
-
+// 把原生对象包裹到js对象里
 template <WrapType wrap_type>
 inline napi_status Wrap(napi_env env,
                         napi_value js_object,
@@ -666,6 +684,7 @@ inline napi_status Wrap(napi_env env,
     *result = reinterpret_cast<napi_ref>(reference);
   } else {
     // Create a self-deleting reference.
+    // 交给Reference管理
     reference = v8impl::Reference::New(env, obj, 0, true, finalize_cb,
         native_object, finalize_cb == nullptr ? nullptr : finalize_hint);
   }
@@ -706,7 +725,7 @@ const char* error_messages[] = {nullptr,
                                 "An arraybuffer was expected",
                                 "A detachable arraybuffer was expected",
 };
-
+// 获取上一个调用函数的错误信息
 napi_status napi_get_last_error_info(napi_env env,
                                      const napi_extended_error_info** result) {
   CHECK_ENV(env);
@@ -716,6 +735,7 @@ napi_status napi_get_last_error_info(napi_env env,
   // message in the `napi_status` enum each time a new error message is added.
   // We don't have a napi_status_last as this would result in an ABI
   // change each time a message was added.
+  // 初始化为非法值
   const int last_status = napi_detachable_arraybuffer_expected;
 
   static_assert(
@@ -725,13 +745,14 @@ napi_status napi_get_last_error_info(napi_env env,
 
   // Wait until someone requests the last error information to fetch the error
   // message string
+  // 根据错误码设置错误描述信息（每次调用api后调用结果存到env中）
   env->last_error.error_message =
       error_messages[env->last_error.error_code];
 
   *result = &(env->last_error);
   return napi_ok;
 }
-
+// 创建一个函数
 napi_status napi_create_function(napi_env env,
                                  const char* utf8name,
                                  size_t length,
@@ -751,25 +772,28 @@ napi_status napi_create_function(napi_env env,
   RETURN_STATUS_IF_FALSE(env, !cbdata.IsEmpty(), napi_generic_failure);
 
   v8::Local<v8::Context> context = env->context();
+  // 调用v8新建一个函数
   v8::MaybeLocal<v8::Function> maybe_function =
       v8::Function::New(context,
+                        // 执行maybe_function时会调用Invoke，cbdata是入参
                         v8impl::FunctionCallbackWrapper::Invoke,
                         cbdata);
   CHECK_MAYBE_EMPTY(env, maybe_function, napi_generic_failure);
-
+  // Escape后返回
   return_value = scope.Escape(maybe_function.ToLocalChecked());
-
+  // 设置函数名称
   if (utf8name != nullptr) {
     v8::Local<v8::String> name_string;
+    // utf8name转成v8对象
     CHECK_NEW_FROM_UTF8_LEN(env, name_string, utf8name, length);
     return_value->SetName(name_string);
   }
-
+  // 把v8类型转成napi的类型
   *result = v8impl::JsValueFromV8LocalValue(return_value);
 
   return GET_RETURN_STATUS(env);
 }
-
+// 定义一个类，即函数模版
 napi_status napi_define_class(napi_env env,
                               const char* utf8name,
                               size_t length,
@@ -793,15 +817,16 @@ napi_status napi_define_class(napi_env env,
       v8impl::CreateFunctionCallbackData(env, constructor, callback_data);
 
   RETURN_STATUS_IF_FALSE(env, !cbdata.IsEmpty(), napi_generic_failure);
-
+  // 定义函数模版
   v8::Local<v8::FunctionTemplate> tpl = v8::FunctionTemplate::New(
       isolate, v8impl::FunctionCallbackWrapper::Invoke, cbdata);
-
+  // 设置类（函数）名称
   v8::Local<v8::String> name_string;
   CHECK_NEW_FROM_UTF8_LEN(env, name_string, utf8name, length);
   tpl->SetClassName(name_string);
 
   size_t static_property_count = 0;
+  // 设置原型属性，即对函数模版创建的函数执行new得到的对象都具有这些属性，
   for (size_t i = 0; i < property_count; i++) {
     const napi_property_descriptor* p = properties + i;
 
@@ -810,7 +835,7 @@ napi_status napi_define_class(napi_env env,
       static_property_count++;
       continue;
     }
-
+    // 从属性描述符中获取属性名称
     v8::Local<v8::Name> property_name;
     napi_status status =
         v8impl::V8NameFromPropertyDescriptor(env, p, &property_name);
@@ -818,7 +843,7 @@ napi_status napi_define_class(napi_env env,
     if (status != napi_ok) {
       return napi_set_last_error(env, status);
     }
-
+    // 从属性描述符中获取属性的属性
     v8::PropertyAttribute attributes =
         v8impl::V8PropertyAttributesFromDescriptor(p);
 
@@ -826,6 +851,7 @@ napi_status napi_define_class(napi_env env,
     // difference is it applies to a template instead of an object,
     // and preferred PropertyAttribute for lack of PropertyDescriptor
     // support on ObjectTemplate.
+    // 有访问存储函数则转成相应的类型
     if (p->getter != nullptr || p->setter != nullptr) {
       v8::Local<v8::FunctionTemplate> getter_tpl;
       v8::Local<v8::FunctionTemplate> setter_tpl;
@@ -843,25 +869,25 @@ napi_status napi_define_class(napi_env env,
         setter_tpl = v8::FunctionTemplate::New(
             isolate, v8impl::FunctionCallbackWrapper::Invoke, setter_data);
       }
-
+      // 在原型上设置访问存储函数
       tpl->PrototypeTemplate()->SetAccessorProperty(
         property_name,
         getter_tpl,
         setter_tpl,
         attributes,
         v8::AccessControl::DEFAULT);
-    } else if (p->method != nullptr) {
+    } else if (p->method != nullptr) { // 值是函数
       v8::Local<v8::Value> cbdata =
           v8impl::CreateFunctionCallbackData(env, p->method, p->data);
 
       RETURN_STATUS_IF_FALSE(env, !cbdata.IsEmpty(), napi_generic_failure);
-
+      // 新建一个函数模版
       v8::Local<v8::FunctionTemplate> t =
         v8::FunctionTemplate::New(isolate,
           v8impl::FunctionCallbackWrapper::Invoke,
           cbdata,
           v8::Signature::New(isolate, tpl));
-
+      // 原型上设置属性的值为函数
       tpl->PrototypeTemplate()->Set(property_name, t, attributes);
     } else {
       v8::Local<v8::Value> value = v8impl::V8LocalValueFromJsValue(p->value);
@@ -870,9 +896,10 @@ napi_status napi_define_class(napi_env env,
   }
 
   v8::Local<v8::Context> context = env->context();
+  // 由函数模版创建一个函数，转成napi类型返回
   *result = v8impl::JsValueFromV8LocalValue(
       scope.Escape(tpl->GetFunction(context).ToLocalChecked()));
-
+  // 静态属性，挂在函数上的属性
   if (static_property_count > 0) {
     std::vector<napi_property_descriptor> static_descriptors;
     static_descriptors.reserve(static_property_count);
@@ -883,7 +910,7 @@ napi_status napi_define_class(napi_env env,
         static_descriptors.push_back(*p);
       }
     }
-
+    // 设置到函数对象中
     napi_status status =
         napi_define_properties(env,
                                *result,
@@ -894,7 +921,7 @@ napi_status napi_define_class(napi_env env,
 
   return GET_RETURN_STATUS(env);
 }
-
+// 获取对象所有可枚举的属性
 napi_status napi_get_property_names(napi_env env,
                                     napi_value object,
                                     napi_value* result) {
@@ -971,7 +998,7 @@ napi_status napi_get_all_property_names(napi_env env,
     default:
       return napi_set_last_error(env, napi_invalid_arg);
   }
-
+  // 调用v8的函数获取对象的属性
   v8::MaybeLocal<v8::Array> maybe_all_propertynames =
       obj->GetPropertyNames(context,
                             collection_mode,
@@ -1118,7 +1145,7 @@ napi_status napi_set_named_property(napi_env env,
   RETURN_STATUS_IF_FALSE(env, set_maybe.FromMaybe(false), napi_generic_failure);
   return GET_RETURN_STATUS(env);
 }
-
+// 判断对象是否有某个属性
 napi_status napi_has_named_property(napi_env env,
                                     napi_value object,
                                     const char* utf8name,
@@ -1141,7 +1168,7 @@ napi_status napi_has_named_property(napi_env env,
   *result = has_maybe.FromMaybe(false);
   return GET_RETURN_STATUS(env);
 }
-
+// 获取对象的属性的值
 napi_status napi_get_named_property(napi_env env,
                                     napi_value object,
                                     const char* utf8name,
@@ -1186,7 +1213,7 @@ napi_status napi_set_element(napi_env env,
 
   return GET_RETURN_STATUS(env);
 }
-
+// 对象是否有索引index
 napi_status napi_has_element(napi_env env,
                              napi_value object,
                              uint32_t index,
@@ -1206,7 +1233,7 @@ napi_status napi_has_element(napi_env env,
   *result = has_maybe.FromMaybe(false);
   return GET_RETURN_STATUS(env);
 }
-
+// 获取对象index索引对应的值
 napi_status napi_get_element(napi_env env,
                              napi_value object,
                              uint32_t index,
@@ -1226,7 +1253,7 @@ napi_status napi_get_element(napi_env env,
   *result = v8impl::JsValueFromV8LocalValue(get_maybe.ToLocalChecked());
   return GET_RETURN_STATUS(env);
 }
-
+// 删除对象的index属性
 napi_status napi_delete_element(napi_env env,
                                 napi_value object,
                                 uint32_t index,
@@ -1469,7 +1496,7 @@ napi_status napi_create_string_latin1(napi_env env,
   *result = v8impl::JsValueFromV8LocalValue(str_maybe.ToLocalChecked());
   return napi_clear_last_error(env);
 }
-
+// 根据字符串字面量创建一个字符串对象
 napi_status napi_create_string_utf8(napi_env env,
                                     const char* str,
                                     size_t length,
@@ -1512,7 +1539,7 @@ napi_status napi_create_string_utf16(napi_env env,
   *result = v8impl::JsValueFromV8LocalValue(str_maybe.ToLocalChecked());
   return napi_clear_last_error(env);
 }
-
+// 创建一个数字对象
 napi_status napi_create_double(napi_env env,
                                double value,
                                napi_value* result) {
@@ -1646,7 +1673,7 @@ napi_status napi_create_symbol(napi_env env,
 
   return napi_clear_last_error(env);
 }
-
+// 把错误信息设置到错误对象中
 static inline napi_status set_error_code(napi_env env,
                                          v8::Local<v8::Value> error,
                                          napi_value code,
@@ -1673,7 +1700,7 @@ static inline napi_status set_error_code(napi_env env,
   }
   return napi_ok;
 }
-// 
+// 创建一个带错误信息的错误对象
 napi_status napi_create_error(napi_env env,
                               napi_value code,
                               napi_value msg,
@@ -1681,12 +1708,13 @@ napi_status napi_create_error(napi_env env,
   CHECK_ENV(env);
   CHECK_ARG(env, msg);
   CHECK_ARG(env, result);
-
+  // 转成v8对象
   v8::Local<v8::Value> message_value = v8impl::V8LocalValueFromJsValue(msg);
   RETURN_STATUS_IF_FALSE(env, message_value->IsString(), napi_string_expected);
-
+  // 传入错误信息构造一个错误对象
   v8::Local<v8::Value> error_obj =
       v8::Exception::Error(message_value.As<v8::String>());
+  // 设置错误码
   napi_status status = set_error_code(env, error_obj, code, nullptr);
   if (status != napi_ok) return status;
 
@@ -1694,7 +1722,7 @@ napi_status napi_create_error(napi_env env,
 
   return napi_clear_last_error(env);
 }
-
+// 创建类型错误的对象
 napi_status napi_create_type_error(napi_env env,
                                    napi_value code,
                                    napi_value msg,
@@ -1715,7 +1743,7 @@ napi_status napi_create_type_error(napi_env env,
 
   return napi_clear_last_error(env);
 }
-
+// 创建range错误的错误对象
 napi_status napi_create_range_error(napi_env env,
                                     napi_value code,
                                     napi_value msg,
@@ -1736,7 +1764,7 @@ napi_status napi_create_range_error(napi_env env,
 
   return napi_clear_last_error(env);
 }
-
+// 获取value的类型
 napi_status napi_typeof(napi_env env,
                         napi_value value,
                         napi_valuetype* result) {
@@ -1779,7 +1807,7 @@ napi_status napi_typeof(napi_env env,
 
   return napi_clear_last_error(env);
 }
-
+// 获取一个undefined对象
 napi_status napi_get_undefined(napi_env env, napi_value* result) {
   CHECK_ENV(env);
   CHECK_ARG(env, result);
@@ -1789,7 +1817,7 @@ napi_status napi_get_undefined(napi_env env, napi_value* result) {
 
   return napi_clear_last_error(env);
 }
-
+// 获取一个null对象
 napi_status napi_get_null(napi_env env, napi_value* result) {
   CHECK_ENV(env);
   CHECK_ARG(env, result);
@@ -1801,6 +1829,7 @@ napi_status napi_get_null(napi_env env, napi_value* result) {
 }
 
 // Gets all callback info in a single call. (Ugly, but faster.)
+// 获取回调函数的信息
 napi_status napi_get_cb_info(
     napi_env env,               // [in] NAPI environment handle
     napi_callback_info cbinfo,  // [in] Opaque callback-info handle
@@ -1845,7 +1874,7 @@ napi_status napi_get_new_target(napi_env env,
   *result = info->GetNewTarget();
   return napi_clear_last_error(env);
 }
-
+// 调执行函数func
 napi_status napi_call_function(napi_env env,
                                napi_value recv,
                                napi_value func,
@@ -1878,7 +1907,7 @@ napi_status napi_call_function(napi_env env,
     return napi_clear_last_error(env);
   }
 }
-
+// 获取上下文中的全局对象
 napi_status napi_get_global(napi_env env, napi_value* result) {
   CHECK_ENV(env);
   CHECK_ARG(env, result);
@@ -1887,7 +1916,7 @@ napi_status napi_get_global(napi_env env, napi_value* result) {
 
   return napi_clear_last_error(env);
 }
-
+// 抛出一个error
 napi_status napi_throw(napi_env env, napi_value error) {
   NAPI_PREAMBLE(env);
   CHECK_ARG(env, error);
@@ -1899,7 +1928,7 @@ napi_status napi_throw(napi_env env, napi_value error) {
   // to the javascript invoker will fail
   return napi_clear_last_error(env);
 }
-
+// 先构造一个error，然后抛出
 napi_status napi_throw_error(napi_env env,
                              const char* code,
                              const char* msg) {
@@ -1956,7 +1985,7 @@ napi_status napi_throw_range_error(napi_env env,
   // to the javascript invoker will fail
   return napi_clear_last_error(env);
 }
-
+// 判断value是不是一个error对象
 napi_status napi_is_error(napi_env env, napi_value value, bool* result) {
   // Omit NAPI_PREAMBLE and GET_RETURN_STATUS because V8 calls here cannot
   // throw JS exceptions.
@@ -1969,7 +1998,7 @@ napi_status napi_is_error(napi_env env, napi_value value, bool* result) {
 
   return napi_clear_last_error(env);
 }
-
+// 获取数字对象中的值
 napi_status napi_get_value_double(napi_env env,
                                   napi_value value,
                                   double* result) {
@@ -2266,7 +2295,7 @@ napi_status napi_get_value_string_utf16(napi_env env,
 
   return napi_clear_last_error(env);
 }
-
+// 把value转成boolean
 napi_status napi_coerce_to_bool(napi_env env,
                                 napi_value value,
                                 napi_value* result) {
@@ -2280,7 +2309,7 @@ napi_status napi_coerce_to_bool(napi_env env,
   *result = v8impl::JsValueFromV8LocalValue(b);
   return GET_RETURN_STATUS(env);
 }
-
+// 把value转成对应的类型
 #define GEN_COERCE_FUNCTION(UpperCaseName, MixedCaseName, LowerCaseName)      \
   napi_status napi_coerce_to_##LowerCaseName(napi_env env,                    \
                                              napi_value value,                \
@@ -2303,7 +2332,7 @@ GEN_COERCE_FUNCTION(OBJECT, Object, object)
 GEN_COERCE_FUNCTION(STRING, String, string)
 
 #undef GEN_COERCE_FUNCTION
-
+// 把原生对象包裹到js对象
 napi_status napi_wrap(napi_env env,
                       napi_value js_object,
                       void* native_object,
@@ -2325,7 +2354,7 @@ napi_status napi_unwrap(napi_env env, napi_value obj, void** result) {
 napi_status napi_remove_wrap(napi_env env, napi_value obj, void** result) {
   return v8impl::Unwrap(env, obj, result, v8impl::RemoveWrap);
 }
-
+// 把data转成External对象
 napi_status napi_create_external(napi_env env,
                                  void* data,
                                  napi_finalize finalize_cb,
@@ -2352,7 +2381,7 @@ napi_status napi_create_external(napi_env env,
 
   return napi_clear_last_error(env);
 }
-
+// 获取External中的对象
 napi_status napi_get_value_external(napi_env env,
                                     napi_value value,
                                     void** result) {
@@ -2370,6 +2399,7 @@ napi_status napi_get_value_external(napi_env env,
 }
 
 // Set initial_refcount to 0 for a weak reference, >0 for a strong reference.
+// 创建一个管理value的Reference对象
 napi_status napi_create_reference(napi_env env,
                                   napi_value value,
                                   uint32_t initial_refcount,
@@ -2381,7 +2411,7 @@ napi_status napi_create_reference(napi_env env,
   CHECK_ARG(env, result);
 
   v8::Local<v8::Value> v8_value = v8impl::V8LocalValueFromJsValue(value);
-
+  // 不是对象或函数则报错
   if (!(v8_value->IsObject() || v8_value->IsFunction())) {
     return napi_set_last_error(env, napi_object_expected);
   }
@@ -2411,6 +2441,7 @@ napi_status napi_delete_reference(napi_env env, napi_ref ref) {
 // refcount is >0, and the referenced object is effectively "pinned".
 // Calling this when the refcount is 0 and the object is unavailable
 // results in an error.
+// 把ref管理的对象引用计数加一
 napi_status napi_reference_ref(napi_env env, napi_ref ref, uint32_t* result) {
   // Omit NAPI_PREAMBLE and GET_RETURN_STATUS because V8 calls here cannot throw
   // JS exceptions.
@@ -2418,6 +2449,7 @@ napi_status napi_reference_ref(napi_env env, napi_ref ref, uint32_t* result) {
   CHECK_ARG(env, ref);
 
   v8impl::Reference* reference = reinterpret_cast<v8impl::Reference*>(ref);
+  // 返回当前的引用计数
   uint32_t count = reference->Ref();
 
   if (result != nullptr) {
@@ -2438,11 +2470,11 @@ napi_status napi_reference_unref(napi_env env, napi_ref ref, uint32_t* result) {
   CHECK_ARG(env, ref);
 
   v8impl::Reference* reference = reinterpret_cast<v8impl::Reference*>(ref);
-
+  // 当前引用计数为0则报错
   if (reference->RefCount() == 0) {
     return napi_set_last_error(env, napi_generic_failure);
   }
-
+  // 引用计数减一
   uint32_t count = reference->Unref();
 
   if (result != nullptr) {
@@ -2455,6 +2487,7 @@ napi_status napi_reference_unref(napi_env env, napi_ref ref, uint32_t* result) {
 // Attempts to get a referenced value. If the reference is weak, the value might
 // no longer be available, in that case the call is still successful but the
 // result is NULL.
+// 获取Reference包裹的对象
 napi_status napi_get_reference_value(napi_env env,
                                      napi_ref ref,
                                      napi_value* result) {
@@ -2469,13 +2502,13 @@ napi_status napi_get_reference_value(napi_env env,
 
   return napi_clear_last_error(env);
 }
-
+// 新建一个HandleScope
 napi_status napi_open_handle_scope(napi_env env, napi_handle_scope* result) {
   // Omit NAPI_PREAMBLE and GET_RETURN_STATUS because V8 calls here cannot throw
   // JS exceptions.
   CHECK_ENV(env);
   CHECK_ARG(env, result);
-
+  // HandleScopeWrapper是对HandleScope的封装
   *result = v8impl::JsHandleScopeFromV8HandleScope(
       new v8impl::HandleScopeWrapper(env->isolate));
   env->open_handle_scopes++;
@@ -2492,10 +2525,11 @@ napi_status napi_close_handle_scope(napi_env env, napi_handle_scope scope) {
   }
 
   env->open_handle_scopes--;
+  // 删除HandleScopeWrapper对象
   delete v8impl::V8HandleScopeFromJsHandleScope(scope);
   return napi_clear_last_error(env);
 }
-
+// 创建EscapableHandleScope
 napi_status napi_open_escapable_handle_scope(
     napi_env env,
     napi_escapable_handle_scope* result) {
@@ -2525,7 +2559,7 @@ napi_status napi_close_escapable_handle_scope(
   env->open_handle_scopes--;
   return napi_clear_last_error(env);
 }
-
+// 句柄逃逸
 napi_status napi_escape_handle(napi_env env,
                                napi_escapable_handle_scope scope,
                                napi_value escapee,
@@ -2633,7 +2667,7 @@ napi_status napi_get_and_clear_last_exception(napi_env env,
 
   return napi_clear_last_error(env);
 }
-
+// value是不是ArrayBuffer
 napi_status napi_is_arraybuffer(napi_env env, napi_value value, bool* result) {
   CHECK_ENV(env);
   CHECK_ARG(env, value);
@@ -2644,7 +2678,7 @@ napi_status napi_is_arraybuffer(napi_env env, napi_value value, bool* result) {
 
   return napi_clear_last_error(env);
 }
-
+// 创建ArrayBuffer
 napi_status napi_create_arraybuffer(napi_env env,
                                     size_t byte_length,
                                     void** data,
@@ -2658,6 +2692,7 @@ napi_status napi_create_arraybuffer(napi_env env,
 
   // Optionally return a pointer to the buffer's data, to avoid another call to
   // retrieve it.
+  // 获取存储数据的地址保存到data中
   if (data != nullptr) {
     *data = buffer->GetBackingStore()->Data();
   }
@@ -2707,7 +2742,7 @@ napi_status napi_create_external_arraybuffer(napi_env env,
   *result = v8impl::JsValueFromV8LocalValue(buffer);
   return GET_RETURN_STATUS(env);
 }
-
+// 获取ArrayBuffer的信息
 napi_status napi_get_arraybuffer_info(napi_env env,
                                       napi_value arraybuffer,
                                       void** data,

@@ -7,7 +7,7 @@ const multicastAddress = '224.0.0.114';
 
 const setup = dgram.createSocket.bind(dgram, { type: 'udp4', reuseAddr: true });
 
-// addMembership() on closed socket should throw
+// () on closed socket should throw
 {
   const socket = setup();
   socket.close(common.mustCall(() => {
@@ -35,7 +35,7 @@ const setup = dgram.createSocket.bind(dgram, { type: 'udp4', reuseAddr: true });
   }));
 }
 
-// addMembership() with no argument should throw
+// () with no argument should throw
 {
   const socket = setup();
   assert.throws(() => {

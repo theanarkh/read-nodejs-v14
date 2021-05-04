@@ -136,11 +136,10 @@ napi_status napi_set_last_error(napi_env env, napi_status error_code,
   napi_clear_last_error((env));                                     \
   v8impl::TryCatch try_catch((env))
 
+// 把napi类型转成v8类型，校验是否为空，非空则返回，空则返回错误
 #define CHECK_TO_TYPE(env, type, context, result, src, status)                \
   do {                                                                        \
-    CHECK_ARG((env), (src));  
-    // 把napi类型转成v8类型，校验是否为空，非空则返回
-                                                    \
+    CHECK_ARG((env), (src));  \
     auto maybe = v8impl::V8LocalValueFromJsValue((src))->To##type((context)); \
     CHECK_MAYBE_EMPTY((env), maybe, (status));                                \
     (result) = maybe.ToLocalChecked();                                        \
@@ -152,7 +151,7 @@ napi_status napi_set_last_error(napi_env env, napi_status error_code,
     CHECK_ARG((env), (src));                                                \
     // 转成v8类型
     v8::Local<v8::Value> v8value = v8impl::V8LocalValueFromJsValue((src));  \
-    // 判断是不是Function类型
+    // 判断是不是Function类型，不是则返回napi_invalid_arg
     RETURN_STATUS_IF_FALSE((env), v8value->IsFunction(), napi_invalid_arg); \
     // 转成v8的Function类型
     (result) = v8value.As<v8::Function>();                                  \
@@ -229,11 +228,13 @@ class Finalizer {
       _finalize_data(finalize_data),
       _finalize_hint(finalize_hint),
       _has_env_reference(refmode == kKeepEnvReference) {
+    // _has_env_reference为true则env引用计数加一
     if (_has_env_reference)
       _env->Ref();
   }
 
   ~Finalizer() {
+    // _has_env_reference为true则env引用计数减一
     if (_has_env_reference)
       _env->Unref();
   }

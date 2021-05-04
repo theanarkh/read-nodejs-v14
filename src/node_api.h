@@ -53,7 +53,7 @@ typedef struct {
   static void fn(void) __attribute__((constructor)); \
   static void fn(void)
 #endif
-
+// 定义一个_register_ ## modname函数并设置在main函数执行前执行
 #define NAPI_MODULE_X(modname, regfunc, priv, flags)                  \
   EXTERN_C_START                                                      \
     static napi_module _module =                                      \
@@ -66,6 +66,7 @@ typedef struct {
       priv,                                                           \
       {0},                                                            \
     };                                                                \
+    // NAPI_C_CTOR设置函数_register_ ## modname在执行main函数前被执行
     NAPI_C_CTOR(_register_ ## modname) {                              \
       napi_module_register(&_module);                                 \
     }                                                                 \
@@ -87,9 +88,12 @@ typedef struct {
 #define NAPI_MODULE_INIT()                                            \
   EXTERN_C_START                                                      \
   NAPI_MODULE_EXPORT napi_value                                       \
+  // napi_register_module_vNAPI_MODULE_VERSION(napi_env env, napi_value exports)
   NAPI_MODULE_INITIALIZER(napi_env env, napi_value exports);          \
   EXTERN_C_END                                                        \
+  // 定义一个函数和结构体（napi模块信息），在main函数执行前注册该napi模块
   NAPI_MODULE(NODE_GYP_MODULE_NAME, NAPI_MODULE_INITIALIZER)          \
+  // NAPI_MODULE_INITIALIZER函数的内容由用户定义
   napi_value NAPI_MODULE_INITIALIZER(napi_env env,                    \
                                      napi_value exports)
 

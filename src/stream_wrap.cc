@@ -250,6 +250,7 @@ void LibuvStreamWrap::OnUvRead(ssize_t nread, const uv_buf_t* buf) {
   // 是否支持传递文件描述符并且有待处理的文件描述符，则判断文件描述符类型
   if (is_named_pipe_ipc() &&
       uv_pipe_pending_count(reinterpret_cast<uv_pipe_t*>(stream())) > 0) {
+    // 判断stream->accepted_fd的handle类型
     type = uv_pipe_pending_type(reinterpret_cast<uv_pipe_t*>(stream()));
   }
 
@@ -259,7 +260,7 @@ void LibuvStreamWrap::OnUvRead(ssize_t nread, const uv_buf_t* buf) {
   // 读取成功
   if (nread > 0) {
     MaybeLocal<Object> pending_obj;
-    // 根据类型创建一个新的c++对象表示客户端，并且从服务器中摘下一个fd保存到客户端
+    // 根据待处理的文件描述符类型创建一个新的c++对象表示客户端，并且从stream中摘下一个fd保存到客户端
     if (type == UV_TCP) {
       pending_obj = AcceptHandle<TCPWrap>(env(), this);
     } else if (type == UV_NAMED_PIPE) {

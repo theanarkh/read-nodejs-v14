@@ -35,7 +35,7 @@ class RefTracker {
   virtual void Finalize(bool isEnvTeardown) {}
 
   typedef RefTracker RefList;
-
+  // 把当前对象插入list后面
   inline void Link(RefList* list) {
     prev_ = list;
     next_ = list->next_;
