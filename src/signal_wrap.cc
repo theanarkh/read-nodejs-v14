@@ -58,7 +58,7 @@ class SignalWrap : public HandleWrap {
         FIXED_ONE_BYTE_STRING(env->isolate(), "Signal");
     constructor->SetClassName(signalString);
     constructor->Inherit(HandleWrap::GetConstructorTemplate(env));
-
+    // 给Signal创建的对象注入两个函数
     env->SetProtoMethod(constructor, "start", Start);
     env->SetProtoMethod(constructor, "stop", Stop);
 

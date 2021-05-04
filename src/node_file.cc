@@ -568,6 +568,7 @@ void AfterStat(uv_fs_t* req) {
 }
 
 void AfterInteger(uv_fs_t* req) {
+  // 通过属性拿到对象的地址
   FSReqBase* req_wrap = FSReqBase::from_req(req);
   FSReqAfterScope after(req_wrap, req);
 

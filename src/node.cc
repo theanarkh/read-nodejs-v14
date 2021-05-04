@@ -277,10 +277,12 @@ MaybeLocal<Value> Environment::BootstrapInternalLoaders() {
       loader_exports_obj->Get(context(), internal_binding_string())
           .ToLocalChecked();
   CHECK(internal_binding_loader->IsFunction());
+  // c++模块加载器
   set_internal_binding_loader(internal_binding_loader.As<Function>());
   Local<Value> require =
       loader_exports_obj->Get(context(), require_string()).ToLocalChecked();
   CHECK(require->IsFunction());
+  // 原生js模块加载器
   set_native_module_require(require.As<Function>());
 
   return scope.Escape(loader_exports);
@@ -302,7 +304,9 @@ MaybeLocal<Value> Environment::BootstrapNode() {
       primordials_string()};
   std::vector<Local<Value>> node_args = {
       process_object(),
+      // 原生模块加载器
       native_module_require(),
+      // c++模块加载器
       internal_binding_loader(),
       primordials()};
 

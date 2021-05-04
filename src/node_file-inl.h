@@ -182,6 +182,7 @@ void FSReqPromise<AliasedBufferT>::Resolve(v8::Local<v8::Value> value) {
   finished_ = true;
   v8::HandleScope scope(env()->isolate());
   InternalCallbackScope callback_scope(this);
+  // 拿到保存的Promise对象，修改状态为resolve，并设置结果
   v8::Local<v8::Value> val =
       object()->Get(env()->context(),
                     env()->promise_string()).ToLocalChecked();
@@ -198,10 +199,12 @@ void FSReqPromise<AliasedBufferT>::ResolveStat(const uv_stat_t* stat) {
 template <typename AliasedBufferT>
 void FSReqPromise<AliasedBufferT>::SetReturnValue(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
+  // 拿到Promise::Resolver对象
   v8::Local<v8::Value> val =
       object()->Get(env()->context(),
                     env()->promise_string()).ToLocalChecked();
   v8::Local<v8::Promise::Resolver> resolver = val.As<v8::Promise::Resolver>();
+  // 拿到一个Promise作为返回值，即js层拿到的值
   args.GetReturnValue().Set(resolver->GetPromise());
 }
 

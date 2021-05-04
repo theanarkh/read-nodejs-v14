@@ -71,10 +71,13 @@ typedef struct {
       napi_module_register(&_module);                                 \
     }                                                                 \
   EXTERN_C_END
-
+// 支持napi的宏
 #define NAPI_MODULE(modname, regfunc)                                 \
   NAPI_MODULE_X(modname, regfunc, NULL, 0)  // NOLINT (readability/null_usage)
-
+/*
+  下面几个宏处理napi版本的，NAPI_MODULE_INITIALIZER最后变成napi_register_module_v1,
+  napi_register_module_v2这样的内容，用于定义执行哪个版本的函数。
+*/
 #define NAPI_MODULE_INITIALIZER_BASE napi_register_module_v
 
 #define NAPI_MODULE_INITIALIZER_X(base, version)                      \

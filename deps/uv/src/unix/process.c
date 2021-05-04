@@ -293,6 +293,7 @@ static void uv__process_child_init(const uv_process_options_t* options,
    * this fd 2 (stderr) would be duplicated into fd 1, thus making both
    * stdout and stderr go to the same fd, which was not the intention. */
   for (fd = 0; fd < stdio_count; fd++) {
+    // 子进程使用的端，写端
     use_fd = pipes[fd][1];
     if (use_fd < 0 || use_fd >= fd)
       continue;
@@ -567,7 +568,7 @@ error:
   if (pipes != NULL) {
     for (i = 0; i < stdio_count; i++) {
       if (i < options->stdio_count)
-        if (options->stdio[i].flags & (UV_INHERIT_FD | UV_INHERIT_STREAM))
+       if (options->stdio[i].flags & (UV_INHERIT_FD | UV_INHERIT_STREAM))
           continue;
       if (pipes[i][0] != -1)
         uv__close_nocheckstdio(pipes[i][0]);

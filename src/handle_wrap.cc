@@ -59,14 +59,14 @@ void HandleWrap::HasRef(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(HasRef(wrap));
 }
 
-// 关闭handle，成功后执行回调
+// 关闭handle（js层调用），成功后执行回调
 void HandleWrap::Close(const FunctionCallbackInfo<Value>& args) {
   HandleWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
   // 传入回调
   wrap->Close(args[0]);
 }
-// 正在关闭handle的函数
+// 真正关闭handle的函数
 void HandleWrap::Close(Local<Value> close_callback) {
   // 正在关闭或已经关闭
   if (state_ != kInitialized)
@@ -129,7 +129,7 @@ void HandleWrap::OnClose(uv_handle_t* handle) {
   CHECK_EQ(wrap->state_, kClosing);
 
   wrap->state_ = kClosed;
-  //  子类实现的函数
+
   wrap->OnClose();
   wrap->handle_wrap_queue_.Remove();
   // 有onclose回调则执行

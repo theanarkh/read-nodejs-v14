@@ -235,7 +235,7 @@ void Worker::Run() {
   CHECK_NOT_NULL(platform_);
 
   Debug(this, "Creating isolate for worker with id %llu", thread_id_);
-
+  // 线程执行所需要的数据结构，比如loop，isolate，和主线程独立
   WorkerThreadData data(this);
   if (isolate_ == nullptr) return;
 
@@ -244,8 +244,9 @@ void Worker::Run() {
     Locker locker(isolate_);
     Isolate::Scope isolate_scope(isolate_);
     SealHandleScope outer_seal(isolate_);
-
+    // std::unique_ptr<Environment, FreeEnvironment> env_;
     DeleteFnPtr<Environment, FreeEnvironment> env_;
+    // 线程执行完后执行的清除函数
     auto cleanup_env = OnScopeLeave([&]() {
       if (!env_) return;
       env_->set_can_call_into_js(false);
@@ -289,6 +290,7 @@ void Worker::Run() {
         // resource constraints, we need something in place to handle it,
         // though.
         TryCatch try_catch(isolate_);
+        // 新建一个context，和主线程独立
         context = NewContext(isolate_);
         if (context.IsEmpty()) {
           // TODO(addaleax): Inform the target about the actual underlying
@@ -304,6 +306,7 @@ void Worker::Run() {
       {
         // TODO(addaleax): Use CreateEnvironment(), or generally another
         // public API.
+        // 新建一个env并初始化，env中会和新的context关联
         env_.reset(new Environment(data.isolate_data_.get(),
                                    context,
                                    std::move(argv_),
@@ -320,6 +323,7 @@ void Worker::Run() {
       {
         Mutex::ScopedLock lock(mutex_);
         if (stopped_) return;
+        // 更新子线程的env
         this->env_ = env_.get();
       }
       Debug(this, "Created Environment for worker with id %llu", thread_id_);
@@ -567,17 +571,18 @@ void Worker::StartThread(const FunctionCallbackInfo<Value>& args) {
   // The object now owns the created thread and should not be garbage collected
   // until that finishes.
   w->ClearWeak();
-
+  // 加入主线程维护的子线程数据结构
   w->env()->add_sub_worker_context(w);
   w->stopped_ = false;
   w->thread_joined_ = false;
-
+  // 是否需要阻塞事件循环退出，默认true
   if (w->has_ref_)
     w->env()->add_refs(1);
-
+  // 是否需要栈和栈大小
   uv_thread_options_t thread_options;
   thread_options.flags = UV_THREAD_HAS_STACK_SIZE;
   thread_options.stack_size = kStackSize;
+  // 创建线程
   CHECK_EQ(uv_thread_create_ex(&w->tid_, &thread_options, [](void* arg) {
     // XXX: This could become a std::unique_ptr, but that makes at least
     // gcc 6.3 detect undefined behaviour when there shouldn't be any.
@@ -588,10 +593,11 @@ void Worker::StartThread(const FunctionCallbackInfo<Value>& args) {
     // Leave a few kilobytes just to make sure we're within limits and have
     // some space to do work in C++ land.
     w->stack_base_ = stack_top - (kStackSize - kStackBufferSize);
-
+    // 执行主逻辑
     w->Run();
 
     Mutex::ScopedLock lock(w->mutex_);
+    // 给主线程提交一个任务，通知主线程子线程执行完毕，因为主线程不能直接执行join阻塞自己
     w->env()->SetImmediateThreadsafe(
         [w = std::unique_ptr<Worker>(w)](Environment* env) {
           if (w->has_ref_)
@@ -662,6 +668,7 @@ namespace {
 
 // Return the MessagePort that is global for this Environment and communicates
 // with the internal [kPort] port of the JS Worker class in the parent thread.
+// 获取和主线程通信的端口
 void GetEnvMessagePort(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
   Local<Object> port = env->message_port();

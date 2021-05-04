@@ -118,7 +118,7 @@ struct MakeLibuvRequestCallback {
 // Match the `void callback(uv_req_t*, ...);` signature that all libuv
 // callbacks use.
 template <typename ReqT, typename... Args>
-// 模板参数的第二个是函数时适配这个
+// 模板参数的第二个是函数时适配这个，AfterGetAddrInfo，说明不是使用ReqWrap来管理的请求，因为ReqWrap管理的请求，第二个参数是handle，而不是函数
 struct MakeLibuvRequestCallback<ReqT, void(*)(ReqT*, Args...)> {
   using F = void(*)(ReqT* req, Args... args);
   // Libuv回调

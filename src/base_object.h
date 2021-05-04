@@ -149,12 +149,13 @@ class BaseObject : public MemoryRetainer {
 };
 
 // Global alias for FromJSObject() to avoid churn.
+// 从obj中取出对应的BaseObject对象
 template <typename T>
 inline T* Unwrap(v8::Local<v8::Object> obj) {
   return BaseObject::FromJSObject<T>(obj);
 }
 
-
+// 从obj中获取对应的BaseObject对象，如果为空则返回第三个参数的值（默认值）
 #define ASSIGN_OR_RETURN_UNWRAP(ptr, obj, ...)                                \
   do {                                                                        \
     *ptr = static_cast<typename std::remove_reference<decltype(*ptr)>::type>( \

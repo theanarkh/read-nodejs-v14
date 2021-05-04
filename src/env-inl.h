@@ -267,6 +267,7 @@ inline bool TickInfo::has_rejection_to_warn() const {
 
 inline void Environment::AssignToContext(v8::Local<v8::Context> context,
                                          const ContextInfo& info) {
+  // 在context中保存env对象                                         
   context->SetAlignedPointerInEmbedderData(
       ContextEmbedderIndex::kEnvironment, this);
   // Used by Environment::GetCurrent to know that we are on a node context.

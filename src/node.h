@@ -582,11 +582,14 @@ enum ModuleFlags {
 
 struct node_module {
   int nm_version;
+  // 模块属性，比如类型
   unsigned int nm_flags;
   void* nm_dso_handle;
   const char* nm_filename;
+  // 回调函数
   node::addon_register_func nm_register_func;
   node::addon_context_register_func nm_context_register_func;
+  // 模块名
   const char* nm_modname;
   void* nm_priv;
   struct node_module* nm_link;
