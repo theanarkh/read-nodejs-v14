@@ -2,7 +2,7 @@
 #define SRC_NODE_API_TYPES_H_
 
 #include "js_native_api_types.h"
-
+// 定义一系列空指针类型
 typedef struct napi_callback_scope__* napi_callback_scope;
 typedef struct napi_async_context__* napi_async_context;
 typedef struct napi_async_work__* napi_async_work;

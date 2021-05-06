@@ -20,7 +20,7 @@ typedef struct napi_handle_scope__* napi_handle_scope;
 typedef struct napi_escapable_handle_scope__* napi_escapable_handle_scope;
 typedef struct napi_callback_info__* napi_callback_info;
 typedef struct napi_deferred__* napi_deferred;
-
+// 属性的属性
 typedef enum {
   napi_default = 0,
   napi_writable = 1 << 0,
@@ -31,7 +31,7 @@ typedef enum {
   // from instance properties. Ignored by napi_define_properties.
   napi_static = 1 << 10,
 } napi_property_attributes;
-
+// 值类型
 typedef enum {
   // ES6 types (corresponds to typeof)
   napi_undefined,
@@ -45,7 +45,7 @@ typedef enum {
   napi_external,
   napi_bigint,
 } napi_valuetype;
-
+// 类型数组的类型
 typedef enum {
   napi_int8_array,
   napi_uint8_array,
@@ -59,7 +59,7 @@ typedef enum {
   napi_bigint64_array,
   napi_biguint64_array,
 } napi_typedarray_type;
-
+// api执行的状态类型
 typedef enum {
   napi_ok,
   napi_invalid_arg,

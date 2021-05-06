@@ -63,7 +63,7 @@ inline static napi_status
 V8NameFromPropertyDescriptor(napi_env env,
                              const napi_property_descriptor* p,
                              v8::Local<v8::Name>* result) {
-  // utf9name和name互斥                             
+  // utf8name和name互斥                             
   if (p->utf8name != nullptr) {
     CHECK_NEW_FROM_UTF8(env, *result, p->utf8name);
   } else {

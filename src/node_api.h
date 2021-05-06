@@ -15,9 +15,10 @@ struct uv_loop_s;  // Forward declaration.
 #ifdef _WIN32
 # define NAPI_MODULE_EXPORT __declspec(dllexport)
 #else
+// 默认导出给外部使用
 # define NAPI_MODULE_EXPORT __attribute__((visibility("default")))
 #endif
-
+// 修饰函数没有返回值
 #if defined(__GNUC__)
 # define NAPI_NO_RETURN __attribute__((noreturn))
 #elif defined(_WIN32)
@@ -49,6 +50,7 @@ typedef struct {
       fn;                                                                   \
   static void __cdecl fn(void)
 #else
+// 修饰函数在main函数执行前执行
 #define NAPI_C_CTOR(fn)                              \
   static void fn(void) __attribute__((constructor)); \
   static void fn(void)
@@ -71,7 +73,7 @@ typedef struct {
       napi_module_register(&_module);                                 \
     }                                                                 \
   EXTERN_C_END
-// 支持napi的宏
+// 在addon里使用的宏，用于注册addon模块
 #define NAPI_MODULE(modname, regfunc)                                 \
   NAPI_MODULE_X(modname, regfunc, NULL, 0)  // NOLINT (readability/null_usage)
 /*
@@ -90,13 +92,18 @@ typedef struct {
 
 #define NAPI_MODULE_INIT()                                            \
   EXTERN_C_START                                                      \
+  // 1 导出函数napi_register_module_vNAPI_MODULE_VERSION(napi_env env, napi_value exports)
   NAPI_MODULE_EXPORT napi_value                                       \
-  // napi_register_module_vNAPI_MODULE_VERSION(napi_env env, napi_value exports)
   NAPI_MODULE_INITIALIZER(napi_env env, napi_value exports);          \
   EXTERN_C_END                                                        \
-  // 定义一个函数和结构体（napi模块信息），在main函数执行前注册该napi模块
+  /*
+    2 根据模块名NODE_GYP_MODULE_NAME和
+      函数名napi_register_module_vNAPI_MODULE_VERSION(napi_env env, napi_value exports)
+      定义napi模块，并定义一个函数_registerNODE_GYP_MODULE_NAME，
+      在main函数执行前注册该napi模块
+  */
   NAPI_MODULE(NODE_GYP_MODULE_NAME, NAPI_MODULE_INITIALIZER)          \
-  // NAPI_MODULE_INITIALIZER函数的内容由用户定义
+  // 3 napi_register_module_vNAPI_MODULE_VERSION(napi_env env, napi_value exports)函数的内容由用户定义
   napi_value NAPI_MODULE_INITIALIZER(napi_env env,                    \
                                      napi_value exports)
 
